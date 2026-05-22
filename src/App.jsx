@@ -1,8 +1,39 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { createClient } from "@supabase/supabase-js";
 
-// JAMEEL FABRICS SMART ERP v5.0 — FINAL CLEAN VERSION
-// Works: Claude Artifacts + PC Browser + Mobile
+// ── Supabase Client ───────────────────────────────────────────
+const SUPA_URL = process.env.REACT_APP_SUPABASE_URL || "";
+const SUPA_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || "";
+const supabase = SUPA_URL && SUPA_KEY ? createClient(SUPA_URL, SUPA_KEY) : null;
+
+// ── Supabase Helper ───────────────────────────────────────────
+const db = {
+  get: async (table) => {
+    if(!supabase) return null;
+    const {data,error} = await supabase.from(table).select("*");
+    if(error){console.error(table,error);return null;}
+    return data;
+  },
+  upsert: async (table, row) => {
+    if(!supabase) return null;
+    const {error} = await supabase.from(table).upsert(row);
+    if(error) console.error(table,error);
+  },
+  del: async (table, id) => {
+    if(!supabase) return null;
+    const {error} = await supabase.from(table).delete().eq("id",id);
+    if(error) console.error(table,error);
+  },
+  sub: (table, cb) => {
+    if(!supabase) return null;
+    return supabase.channel(table)
+      .on("postgres_changes",{event:"*",schema:"public",table},(payload)=>cb(payload))
+      .subscribe();
+  }
+};
+
+// JAMEEL FABRICS SMART ERP v6.0 — Supabase Sync
 
 const THEMES = {
   "Black Gold": {bg:"#0a0a0a",surface:"#141414",card:"#1a1a1a",border:"#2a2a2a",accent:"#c9a84c",text:"#f5f0e8",muted:"#777",danger:"#e05252",success:"#4caf7d",info:"#5296e0"},
@@ -138,15 +169,15 @@ function svgStr(value,w,h) {
 // ── Thermal Bill HTML ─────────────────────────────────────────
 function buildBill(bill,tpl="standard",msg="Shukriya! Dobara tashreef layen 🙏",si={name:"Jameel Fabrics",address:"Circular Road Kunjah, Distt Gujrat",phone:"03008722232",tiktok:"@jameelfabrics",instagram:"@jameelfabrics"}) {
   if(!bill)return"";
-  const D=`<div style="border-top:1px dashed #000;margin:4px 0"></div>`;
-  const H=`<div style="text-align:center"><div style="font-size:15px;font-weight:900">*** ${si.name.toUpperCase()} ***</div><div style="font-size:10px;font-weight:700">${si.address}</div><div style="font-size:10px;font-weight:700">Tel/WA: ${si.phone}</div>${si.tiktok?`<div style="font-size:9px;font-weight:700">TikTok:${si.tiktok} | IG:${si.instagram||""}</div>`:""}</div>`;
-  const I=`<div style="font-size:11px;font-weight:700"><div style="display:flex;justify-content:space-between"><span><b>Date:</b>${bill.date}</span><span><b>#</b>${String(bill.id).slice(-6)}</span></div><div><b>Customer:</b>${bill.customer||"Walk-in"}${bill.phone?` | ${bill.phone}`:""}</div><div style="display:flex;justify-content:space-between"><span><b>By:</b>${bill.salesman}${bill.dealing?` / ${bill.dealing}`:""}</span><span>${bill.payment}</span></div></div>`;
-  const rows=bill.items.map(i=>`<tr><td style="padding:2px 1px;font-size:11px;font-weight:700">${i.name}${i.onOffer?" [OFFER]":""}</td><td style="padding:2px 1px;text-align:center;font-size:11px;font-weight:700;white-space:nowrap">${i.qty}${i.unit}</td><td style="padding:2px 1px;text-align:right;font-size:11px;font-weight:700">${Number(i.price).toLocaleString()}</td><td style="padding:2px 1px;text-align:right;font-weight:900;font-size:11px">${Number(i.total).toLocaleString()}</td></tr>`).join("");
-  const tots=`${bill.discount>0?`<tr><td colspan="3" style="text-align:right;font-size:11px;font-weight:700;color:red">Discount:</td><td style="text-align:right;font-size:11px;font-weight:700;color:red">-Rs.${Number(bill.discount).toLocaleString()}</td></tr>`:""}<tr style="border-top:2px solid #000"><td colspan="3" style="text-align:right;font-size:13px;font-weight:900;padding:3px 1px">TOTAL:</td><td style="text-align:right;font-size:13px;font-weight:900;padding:3px 1px">Rs.${Number(bill.total).toLocaleString()}</td></tr><tr><td colspan="3" style="text-align:right;font-size:11px;font-weight:700;padding:2px 1px">Paid:</td><td style="text-align:right;font-size:11px;font-weight:700;color:green;padding:2px 1px">Rs.${Number(bill.paid).toLocaleString()}</td></tr>${bill.remaining>0?`<tr><td colspan="3" style="text-align:right;font-size:12px;font-weight:900;color:red;padding:2px 1px">Baaki:</td><td style="text-align:right;font-size:12px;font-weight:900;color:red;padding:2px 1px">Rs.${Number(bill.remaining).toLocaleString()}</td></tr>`:""}`;
-  const P=`<div style="font-size:9px;font-weight:700;text-align:center;line-height:1.7">Receipt k baghair wapsi nahi<br/>Sale/Offer items non-returnable<br/>Exchange 2-3 din andar</div>`;
-  const F=`<div style="text-align:center;font-size:10px;font-weight:700;margin-top:4px"><b>${msg}</b><br/>TikTok:${si.tiktok||""} | IG:${si.instagram||""} | WA:${si.phone}</div>`;
-  if(tpl==="simple")return`<div style="width:72mm;font-family:'Courier New',monospace;font-weight:700">${H}${D}<div style="font-size:10px;font-weight:700">Date:${bill.date} | #${String(bill.id).slice(-6)} | By:${bill.salesman}${bill.dealing?"/"+bill.dealing:""}</div>${D}${bill.items.map(i=>`<div style="font-weight:700"><b>${i.name}</b> ${i.qty}${i.unit} x Rs.${Number(i.price).toLocaleString()} = <b>Rs.${Number(i.total).toLocaleString()}</b></div>`).join("")}${D}<div style="text-align:right;font-size:14px;font-weight:900">TOTAL: Rs.${Number(bill.total).toLocaleString()}</div><div style="text-align:right;font-weight:700">Paid: Rs.${Number(bill.paid).toLocaleString()}</div>${bill.remaining>0?`<div style="text-align:right;color:red;font-weight:900">Baaki: Rs.${Number(bill.remaining).toLocaleString()}</div>`:""}${D}${P}${D}${F}</div>`;
-  return`<div style="width:72mm;font-family:'Courier New',monospace">${H}${D}${I}${D}<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;font-size:10px;font-weight:900;border-bottom:1px solid #000;padding:2px 1px">Item</th><th style="text-align:center;font-size:10px;font-weight:900;border-bottom:1px solid #000;padding:2px 1px">Qty</th><th style="text-align:right;font-size:10px;font-weight:900;border-bottom:1px solid #000;padding:2px 1px">Rate</th><th style="text-align:right;font-size:10px;font-weight:900;border-bottom:1px solid #000;padding:2px 1px">Amt</th></tr></thead><tbody>${rows}</tbody><tfoot>${tots}</tfoot></table>${D}${P}${D}${F}</div>`;
+  const D=`<div style="border-top:2px dashed #000;margin:5px 0"></div>`;
+  const H=`<div style="text-align:center;font-weight:900"><div style="font-size:16px;font-weight:900">*** ${si.name.toUpperCase()} ***</div><div style="font-size:11px;font-weight:900">${si.address}</div><div style="font-size:11px;font-weight:900">Tel/WA: ${si.phone}</div>${si.tiktok?`<div style="font-size:10px;font-weight:900">TikTok:${si.tiktok} | IG:${si.instagram||""}</div>`:""}</div>`;
+  const I=`<div style="font-size:12px;font-weight:900"><div style="display:flex;justify-content:space-between"><span>Date: ${bill.date}</span><span># ${String(bill.id).slice(-6)}</span></div><div>Customer: ${bill.customer||"Walk-in"}${bill.phone?` | ${bill.phone}`:""}</div><div style="display:flex;justify-content:space-between"><span>By: ${bill.salesman}${bill.dealing?` / ${bill.dealing}`:""}</span><span>${bill.payment}</span></div></div>`;
+  const rows=bill.items.map(i=>`<tr><td style="padding:3px 1px;font-size:12px;font-weight:900">${i.name}${i.onOffer?" [OFFER]":""}</td><td style="padding:3px 1px;text-align:center;font-size:12px;font-weight:900;white-space:nowrap">${i.qty}${i.unit}</td><td style="padding:3px 1px;text-align:right;font-size:12px;font-weight:900">${Number(i.price).toLocaleString()}</td><td style="padding:3px 1px;text-align:right;font-weight:900;font-size:12px">${Number(i.total).toLocaleString()}</td></tr>`).join("");
+  const tots=`${bill.discount>0?`<tr><td colspan="3" style="text-align:right;font-size:12px;font-weight:900;color:red">Discount:</td><td style="text-align:right;font-size:12px;font-weight:900;color:red">-Rs.${Number(bill.discount).toLocaleString()}</td></tr>`:""}<tr style="border-top:2px solid #000"><td colspan="3" style="text-align:right;font-size:14px;font-weight:900;padding:4px 1px">TOTAL:</td><td style="text-align:right;font-size:14px;font-weight:900;padding:4px 1px">Rs.${Number(bill.total).toLocaleString()}</td></tr><tr><td colspan="3" style="text-align:right;font-size:12px;font-weight:900;padding:3px 1px">Paid:</td><td style="text-align:right;font-size:12px;font-weight:900;color:green;padding:3px 1px">Rs.${Number(bill.paid).toLocaleString()}</td></tr><tr><td colspan="3" style="text-align:right;font-size:13px;font-weight:900;color:${bill.remaining>0?"red":"green"};padding:3px 1px">Remaining:</td><td style="text-align:right;font-size:13px;font-weight:900;color:${bill.remaining>0?"red":"green"};padding:3px 1px">Rs.${Number(bill.remaining).toLocaleString()}</td></tr>`;
+  const P=`<div style="font-size:10px;font-weight:900;text-align:center;line-height:1.8">Receipt k baghair wapsi nahi<br/>Sale/Offer items non-returnable<br/>Exchange 2-3 din andar</div>`;
+  const F=`<div style="text-align:center;font-size:11px;font-weight:900;margin-top:4px">${msg}<br/>TikTok:${si.tiktok||""} | IG:${si.instagram||""} | WA:${si.phone}</div>`;
+  if(tpl==="simple")return`<div style="width:72mm;font-family:'Courier New',monospace;font-weight:900">${H}${D}<div style="font-size:11px;font-weight:900">Date:${bill.date} | #${String(bill.id).slice(-6)} | By:${bill.salesman}${bill.dealing?"/"+bill.dealing:""}</div>${D}${bill.items.map(i=>`<div style="font-weight:900">${i.name} ${i.qty}${i.unit} x Rs.${Number(i.price).toLocaleString()} = Rs.${Number(i.total).toLocaleString()}</div>`).join("")}${D}<div style="text-align:right;font-size:15px;font-weight:900">TOTAL: Rs.${Number(bill.total).toLocaleString()}</div><div style="text-align:right;font-weight:900">Paid: Rs.${Number(bill.paid).toLocaleString()}</div><div style="text-align:right;color:${bill.remaining>0?"red":"green"};font-weight:900">Remaining: Rs.${Number(bill.remaining).toLocaleString()}</div>${D}${P}${D}${F}</div>`;
+  return`<div style="width:72mm;font-family:'Courier New',monospace;font-weight:900">${H}${D}${I}${D}<table style="width:100%;border-collapse:collapse;font-weight:900"><thead><tr><th style="text-align:left;font-size:11px;font-weight:900;border-bottom:2px solid #000;padding:3px 1px">Item</th><th style="text-align:center;font-size:11px;font-weight:900;border-bottom:2px solid #000;padding:3px 1px">Qty</th><th style="text-align:right;font-size:11px;font-weight:900;border-bottom:2px solid #000;padding:3px 1px">Rate</th><th style="text-align:right;font-size:11px;font-weight:900;border-bottom:2px solid #000;padding:3px 1px">Amt</th></tr></thead><tbody>${rows}</tbody><tfoot>${tots}</tfoot></table>${D}${P}${D}${F}</div>`;
 }
 
 function exportCSV(data,fn) {
@@ -297,7 +328,7 @@ export default function App() {
   const css = mkCSS(T);
   const isAdmin   = user?.role==="Admin";
   const isManager = user?.role==="Manager"||isAdmin;
-  const log = (action,detail)=>{ if(!user)return; setLogs(l=>[{id:gid(),time:new Date().toLocaleString(),user:user.name,action,detail},...l.slice(0,199)]); };
+  const log = (action,detail)=>{ if(!user)return; const l={id:gid(),time:new Date().toLocaleString(),date:td(),userName:user.name,user:user.name,action,detail}; setLogs(prev=>[l,...prev.slice(0,199)]); db.upsert("activity_logs",{id:l.id,date:l.date,user_name:l.userName,action,detail}); };
 
   const todaySales = sales.filter(s=>s.date===td());
   const todayTotal = todaySales.reduce((a,s)=>a+s.total,0);
@@ -321,7 +352,78 @@ export default function App() {
     }
   },[lowStock.length]);
 
+  const [syncing,setSyncing]=useState(false);
+  const [syncStatus,setSyncStatus]=useState(supabase?"🔄 Connecting...":"💾 Local Only");
+  const [lastSync,setLastSync]=useState("");
   const [showNotifs,setShowNotifs]=useState(false);
+
+  // ── Load from Supabase on mount ──────────────────────────────
+  useEffect(()=>{
+    if(!supabase){setSyncStatus("💾 Local Only");return;}
+    const load=async()=>{
+      setSyncing(true);setSyncStatus("🔄 Loading...");
+      try{
+        const [pr,cu,em,su,sa,ex,ud,at,bk,pi,re,dm,sr,sl,cc,of,dr,lg,sp]=await Promise.all([
+          db.get("products"),db.get("customers"),db.get("employees"),db.get("suppliers"),
+          db.get("sales"),db.get("expenses"),db.get("udhaar"),db.get("attendance"),
+          db.get("bookings"),db.get("purchase_invoices"),db.get("stock_returns"),
+          db.get("damaged_stock"),db.get("supplier_returns"),db.get("salary_payments"),
+          db.get("cash_closings"),db.get("offers"),db.get("discount_requests"),
+          db.get("activity_logs"),db.get("shop_info"),
+        ]);
+        const map=(d,conv)=>d&&d.length?conv?d.map(conv):d:null;
+        const pc=r=>({...r,id:r.id,name:r.name,brand:r.brand,color:r.color,fabric:r.fabric,category:r.category,rack:r.rack,stock:r.stock,costPrice:r.cost_price,salePrice:r.sale_price,qtyType:r.qty_type,barcode:r.barcode,bonus:r.bonus,maxDiscount:r.max_discount,offerPrice:r.offer_price,offerStart:r.offer_start,offerEnd:r.offer_end,supplier:r.supplier});
+        const cc2=r=>({...r,id:r.id,name:r.customer_name||r.name,customerName:r.customer_name,phone:r.phone,city:r.city,address:r.address,loyalty:r.loyalty,totalPurchases:r.total_purchases,udhaar:r.udhaar,visits:r.visits});
+        if(pr?.length)setProds(pr.map(pc));
+        if(cu?.length)setCusts(cu.map(cc2));
+        if(em?.length)setEmps(em);
+        if(su?.length)setSupps(su.map(r=>({...r,totalPurchases:r.total_purchases})));
+        if(sa?.length)setSales(sa.map(r=>({...r,items:r.items||[]})));
+        if(ex?.length)setExps(ex);
+        if(ud?.length)setUdh(ud.map(r=>({...r,customerName:r.customer_name,totalAmount:r.total_amount})));
+        if(at?.length)setAtt(at.map(r=>({...r,empId:r.emp_id,empName:r.emp_name})));
+        if(bk?.length)setBk(bk.map(r=>({...r,customerName:r.customer_name,productId:r.product_id,productName:r.product_name,advancePaid:r.advance_paid,totalAmount:r.total_amount,deliveryDate:r.delivery_date})));
+        if(pi?.length)setPi(pi.map(r=>({...r,supplierId:r.supplier_id,supplierName:r.supplier_name,productId:r.product_id,productName:r.product_name,costPrice:r.cost_price})));
+        if(re?.length)setRet(re.map(r=>({...r,customerName:r.customer_name,productId:r.product_id,productName:r.product_name})));
+        if(dm?.length)setDmg(dm.map(r=>({...r,productId:r.product_id,productName:r.product_name,costPrice:r.cost_price,supplierId:r.supplier_id,supplierName:r.supplier_name,supplierReturn:r.supplier_return})));
+        if(sr?.length)setSupRet(sr.map(r=>({...r,supplierId:r.supplier_id,supplierName:r.supplier_name,productId:r.product_id,productName:r.product_name,costPrice:r.cost_price})));
+        if(sl?.length)setSal(sl.map(r=>({...r,empId:r.emp_id,empName:r.emp_name})));
+        if(cc?.length)setCc(cc.map(r=>({...r,totalSales:r.total_sales,totalExpenses:r.total_expenses})));
+        if(of?.length){/* offers in products already */}
+        if(dr?.length)setDr(dr.map(r=>({...r,cartSnapshot:r.cart_snapshot,discountRequested:r.discount_requested})));
+        if(lg?.length)setLogs(lg);
+        if(sp?.length&&sp[0])setShopInfo({name:sp[0].name,address:sp[0].address,phone:sp[0].phone,whatsapp:sp[0].whatsapp,tiktok:sp[0].tiktok,instagram:sp[0].instagram,website:sp[0].website});
+        setSyncStatus("✅ Synced");setLastSync(new Date().toLocaleTimeString());
+      }catch(e){console.error(e);setSyncStatus("❌ Sync Error");}
+      setSyncing(false);
+    };
+    load();
+  },[]);
+
+  // ── Real-time subscriptions ──────────────────────────────────
+  useEffect(()=>{
+    if(!supabase)return;
+    const subs=[
+      db.sub("products",()=>db.get("products").then(d=>{if(d?.length)setProds(d.map(r=>({...r,costPrice:r.cost_price,salePrice:r.sale_price,qtyType:r.qty_type,maxDiscount:r.max_discount,offerPrice:r.offer_price,offerStart:r.offer_start,offerEnd:r.offer_end})));})),
+      db.sub("sales",()=>db.get("sales").then(d=>{if(d?.length)setSales(d.map(r=>({...r,items:r.items||[]})));})),
+      db.sub("customers",()=>db.get("customers").then(d=>{if(d?.length)setCusts(d.map(r=>({...r,customerName:r.customer_name,totalPurchases:r.total_purchases})));})),
+      db.sub("udhaar",()=>db.get("udhaar").then(d=>{if(d?.length)setUdh(d.map(r=>({...r,customerName:r.customer_name,totalAmount:r.total_amount})));})),
+      db.sub("expenses",()=>db.get("expenses").then(d=>{if(d?.length)setExps(d);})),
+    ];
+    setSyncStatus("✅ Live Sync Active");
+    return()=>subs.forEach(s=>s&&supabase.removeChannel(s));
+  },[]);
+
+  // ── Save to Supabase helpers ──────────────────────────────────
+  const syncProd=(p)=>db.upsert("products",{id:p.id,name:p.name,brand:p.brand,color:p.color,fabric:p.fabric,category:p.category,rack:p.rack,stock:p.stock,cost_price:p.costPrice,sale_price:p.salePrice,qty_type:p.qtyType,barcode:p.barcode,bonus:p.bonus,max_discount:p.maxDiscount,offer_price:p.offerPrice,offer_start:p.offerStart,offer_end:p.offerEnd,supplier:p.supplier});
+  const syncSale=(s)=>db.upsert("sales",{id:s.id,date:s.date,customer:s.customer,phone:s.phone,salesman:s.salesman,dealing:s.dealing,items:s.items,subtotal:s.subtotal,discount:s.discount,total:s.total,paid:s.paid,remaining:s.remaining,payment:s.payment});
+  const syncCust=(c)=>db.upsert("customers",{id:c.id,name:c.name,phone:c.phone,city:c.city,address:c.address,loyalty:c.loyalty,total_purchases:c.totalPurchases,udhaar:c.udhaar,visits:c.visits});
+  const syncExp=(e)=>db.upsert("expenses",{id:e.id,date:e.date,type:e.type,amount:e.amount,description:e.description,by:e.by});
+  const syncUdh=(u)=>db.upsert("udhaar",{id:u.id,customer_name:u.customerName,phone:u.phone,total_amount:u.totalAmount,paid:u.paid,remaining:u.remaining,date:u.date,due_date:u.dueDate,notes:u.notes});
+  const syncEmp=(e)=>db.upsert("employees",{id:e.id,name:e.name,phone:e.phone,role:e.role,salary:e.salary,advance:e.advance,join_date:e.joinDate,address:e.address});
+  const syncSupp=(s)=>db.upsert("suppliers",{id:s.id,name:s.name,phone:s.phone,address:s.address,email:s.email,balance:s.balance,total_purchases:s.totalPurchases});
+  const syncLog=(l)=>db.upsert("activity_logs",{id:l.id,date:l.date,user_name:l.userName,action:l.action,detail:l.detail});
+  const syncShop=(s)=>db.upsert("shop_info",{id:1,name:s.name,address:s.address,phone:s.phone,whatsapp:s.whatsapp,tiktok:s.tiktok,instagram:s.instagram,website:s.website});
 
   if(!user) return <Login users={users} onLogin={(u)=>{setUser(u);log("Login",u.name+" logged in");}} T={T} t={t} css={css}/>;
 
@@ -343,7 +445,7 @@ export default function App() {
   const doBackup=()=>{const data={users,prods,custs,emps,supps,sales,exps,udh,att,dmg,ret,cc,sal,pi,bk,dr,logs,supRet,shopInfo,sysPin,exportDate:new Date().toLocaleString()};const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));a.download=`jameel-backup-${td()}.json`;a.click();};
   const doRestore=(file)=>{const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(d.prods)setProds(d.prods);if(d.custs)setCusts(d.custs);if(d.emps)setEmps(d.emps);if(d.supps)setSupps(d.supps);if(d.sales)setSales(d.sales);if(d.exps)setExps(d.exps);if(d.udh)setUdh(d.udh);if(d.att)setAtt(d.att);if(d.dmg)setDmg(d.dmg);if(d.ret)setRet(d.ret);if(d.cc)setCc(d.cc);if(d.sal)setSal(d.sal);if(d.pi)setPi(d.pi);if(d.bk)setBk(d.bk);if(d.dr)setDr(d.dr);if(d.supRet)setSupRet(d.supRet);if(d.shopInfo)setShopInfo(d.shopInfo);alert("✅ Backup restore ho gaya!");log("Backup","Restored");}catch{alert("❌ File invalid!");}};r.readAsText(file);};
 
-  const sp = {T,t,css,isAdmin,isManager,td,gid,pkr,mon,log,BarcodeSVG,svgStr};
+  const sp = {T,t,css,isAdmin,isManager,td,gid,pkr,mon,log,BarcodeSVG,svgStr,db,syncProd,syncSale,syncCust,syncExp,syncUdh,syncEmp,syncSupp,syncShop};
 
   const navGroups = [
     {
@@ -438,6 +540,7 @@ export default function App() {
             <button onClick={()=>setShowNotifs(false)} style={{...css.btnO,width:"100%",marginTop:"4px",fontSize:"10px"}}>Close ✕</button>
           </div>}
         </div>}
+        <span style={{fontSize:"10px",color:syncing?"#e0a052":syncStatus.includes("✅")?"#4caf7d":"#e05252",background:T.surface,padding:"2px 8px",borderRadius:"10px",border:`1px solid ${T.border}`}}>{syncStatus}{lastSync&&` ${lastSync}`}</span>
         <span style={css.badge(isAdmin?T.accent:isManager?T.info:T.success)}>{user.role}</span>
         <span style={{fontSize:"11px",color:T.muted,maxWidth:"80px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.name}</span>
         <select value={lang} onChange={e=>setLang(e.target.value)} style={{...css.sel,width:"auto",padding:"3px 6px",fontSize:"10px"}}>
@@ -656,32 +759,8 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
   return(
     <div>
       <div style={css.h1}>🧾 {t.pos}</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 310px",gap:"12px",alignItems:"start"}}>
-        <div>
-          <div style={css.row}>
-            <input value={sq} onChange={e=>setSq(e.target.value)} style={{...css.inp,flex:1}} placeholder="🔍 Naam, barcode, rang..."/>
-            <select value={cf} onChange={e=>setCf(e.target.value)} style={{...css.sel,width:"170px"}}>
-              <option value="All">All</option>{CATS.map(c=><option key={c} value={c}>{c.split(" ").slice(0,2).join(" ")}</option>)}
-            </select>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:"7px",marginTop:"8px",maxHeight:"calc(100vh - 220px)",overflow:"auto"}}>
-            {fl.map(p=>(
-              <div key={p.id} style={{background:T.card,border:`1px solid ${p.stock<=5?T.danger+"55":p._off?T.accent+"44":T.border}`,borderRadius:"9px",padding:"9px"}}>
-                {p._off&&<div style={{...css.badge(T.accent),fontSize:"9px",marginBottom:"3px"}}>🏷️ OFFER</div>}
-                <div style={{fontWeight:"700",fontSize:"11px",marginBottom:"2px"}}>{p.name}</div>
-                <div style={{fontSize:"10px",color:T.muted,marginBottom:"4px"}}>{p.color}•{p.rack}•{p.qtyType}</div>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}>
-                  <div>{p._off&&<div style={{fontSize:"9px",color:T.muted,textDecoration:"line-through"}}>{pkr(p.salePrice)}</div>}<span style={{color:T.accent,fontWeight:"700",fontSize:"12px"}}>{pkr(p._ep)}</span></div>
-                  <span style={css.badge(p.stock<=5?T.danger:T.success)}>{p.stock}</span>
-                </div>
-                <div style={{display:"flex",gap:"3px"}}>
-                  <input type="number" min="0.1" step="0.1" value={qi[p.id]||1} onChange={e=>setQi({...qi,[p.id]:e.target.value})} style={{...css.inp,width:"44px",padding:"3px 5px",fontSize:"11px"}}/>
-                  <button onClick={()=>add(p)} disabled={p.stock<=0} style={{...css.btn(p.stock<=0?T.muted:T.accent),flex:1,padding:"3px",fontSize:"10px",opacity:p.stock<=0?0.5:1}}>{p.stock<=0?"Out":"+ Add"}</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+      <div style={{display:"grid",gridTemplateColumns:"310px 1fr",gap:"12px",alignItems:"start"}}>
+        {/* LEFT — Cart & Bill */}
         <div style={{...css.card,position:"sticky",top:0}}>
           <div style={{fontWeight:"800",color:T.accent,marginBottom:"8px"}}>🛒 Cart ({cart.length})</div>
           <label style={css.lbl}>Customer</label>
@@ -734,6 +813,33 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
               <button onClick={()=>setShowCalc(true)} style={{...css.btnO,padding:"6px 10px",fontSize:"11px"}}>🧮</button>
               <button onClick={checkout} style={{...css.btn(),flex:1,padding:"10px",fontSize:"13px"}}>✅ Checkout & Print</button>
             </div>
+          </div>
+        </div>
+
+        {/* RIGHT — Products */}
+        <div>
+          <div style={css.row}>
+            <input value={sq} onChange={e=>setSq(e.target.value)} style={{...css.inp,flex:1}} placeholder="🔍 Naam, barcode, rang..."/>
+            <select value={cf} onChange={e=>setCf(e.target.value)} style={{...css.sel,width:"170px"}}>
+              <option value="All">All</option>{CATS.map(c=><option key={c} value={c}>{c.split(" ").slice(0,2).join(" ")}</option>)}
+            </select>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:"7px",marginTop:"8px",maxHeight:"calc(100vh - 200px)",overflow:"auto"}}>
+            {fl.map(p=>(
+              <div key={p.id} style={{background:T.card,border:`1px solid ${p.stock<=5?T.danger+"55":p._off?T.accent+"44":T.border}`,borderRadius:"9px",padding:"9px"}}>
+                {p._off&&<div style={{...css.badge(T.accent),fontSize:"9px",marginBottom:"3px"}}>🏷️ OFFER</div>}
+                <div style={{fontWeight:"700",fontSize:"11px",marginBottom:"2px"}}>{p.name}</div>
+                <div style={{fontSize:"10px",color:T.muted,marginBottom:"4px"}}>{p.color}•{p.rack}•{p.qtyType}</div>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}>
+                  <div>{p._off&&<div style={{fontSize:"9px",color:T.muted,textDecoration:"line-through"}}>{pkr(p.salePrice)}</div>}<span style={{color:T.accent,fontWeight:"700",fontSize:"12px"}}>{pkr(p._ep)}</span></div>
+                  <span style={css.badge(p.stock<=5?T.danger:T.success)}>{p.stock}</span>
+                </div>
+                <div style={{display:"flex",gap:"3px"}}>
+                  <input type="number" min="0.1" step="0.1" value={qi[p.id]||1} onChange={e=>setQi({...qi,[p.id]:e.target.value})} style={{...css.inp,width:"44px",padding:"3px 5px",fontSize:"11px"}}/>
+                  <button onClick={()=>add(p)} disabled={p.stock<=0} style={{...css.btn(p.stock<=0?T.muted:T.accent),flex:1,padding:"3px",fontSize:"10px",opacity:p.stock<=0?0.5:1}}>{p.stock<=0?"Out":"+ Add"}</button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
