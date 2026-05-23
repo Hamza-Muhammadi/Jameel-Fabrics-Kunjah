@@ -744,13 +744,40 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
 
   const reqDisc=()=>{if(!discAmt||discAmt<=0)return alert("Discount amount dalo!");const req={id:gid(),date:now,salesman:user.name,customer:cust,cartSnapshot:cart,subtotal:sub,discountRequested:discAmt,note:drNote,status:"Pending",createdAt:new Date().toLocaleString()};setDr(d=>[...d,req]);log("Discount Request",`Rs.${discAmt} — ${cust}`);setShowDR(false);setDrNote("");alert("✅ Admin ko request bhej di!");};
 
-  const checkout=()=>{
+  const checkout=async()=>{
     if(!cart.length)return alert("Cart khali hai!");
     if(discAmt>0&&!isAdmin){const mx=cart.reduce((a,item)=>{const p=prods.find(x=>x.id===item.pid);return a+(p?(item.price*item.qty*(p.maxDiscount||10)/100):0);},0);if(discAmt>mx){setShowDR(true);return;}}
     const payStr=splitPay?`${pay}+${pay2}`:pay;
     const s={id:gid(),date:now,customer:cust,phone:custs.find(c=>c.name===cust)?.phone||"",salesman:sman,dealing:dealing,items:cart,subtotal:sub,discount:discAmt,total:tot,paid:totalPaid,remaining:rem,payment:payStr};
     setSales(prev=>[...prev,s]);
     cart.forEach(item=>setProds(prev=>prev.map(p=>p.id===item.pid?{...p,stock:Math.max(0,+(p.stock-item.qty).toFixed(2))}:p)));
+
+    // Supabase sync — stock update + alert
+    if(supabase){
+      syncSale(s);
+      for(const item of cart){
+        const prod = prods.find(p=>p.id===item.pid);
+        if(!prod) continue;
+        const newStock = Math.max(0, +(prod.stock - item.qty).toFixed(2));
+        await supabase.from("products").update({stock:newStock}).eq("id",item.pid);
+        // Alert agar sold out ya low stock
+        if(newStock<=0){
+          await supabase.from("website_alerts").insert({
+            id:Date.now()+Math.random()*1000|0, type:"sold_out", product_id:item.pid,
+            product_name:item.name,
+            message:`"${item.name}" SOLD OUT in ERP! Update website status.`,
+            is_read:false,
+          });
+        } else if(newStock<=3){
+          await supabase.from("website_alerts").insert({
+            id:Date.now()+Math.random()*1000|0, type:"low_stock", product_id:item.pid,
+            product_name:item.name,
+            message:`"${item.name}" low stock: only ${newStock} ${prod.qtyType} left!`,
+            is_read:false,
+          });
+        }
+      }
+    }
     if(rem>0){const co=custs.find(c=>c.name===cust);setUdh(prev=>[...prev,{id:gid(),customerName:cust,phone:co?.phone||"",totalAmount:rem,paid:0,remaining:rem,date:now,dueDate:"",notes:`Bill#${s.id}`}]);}
     log("Sale",`Bill#${s.id} — ${cust} — ${pkr(tot)}`);
     setBill(s);setCart([]);setDisc(0);setDiscPct(0);setPaid(0);setPaid2(0);setSplitPay(false);setDealing("");
@@ -936,11 +963,43 @@ function SupplierReturn({T,t,css,supRet,setSupRet,supps,prods,setProds,gid,pkr,t
 // ── INVENTORY ─────────────────────────────────────────────────
 function Inventory({T,t,css,prods,setProds,supps,isAdmin,gid,pkr,td,log,BarcodeSVG,gbc,ghc}) {
   const [sf,setSf]=useState(false);const [ep,setEp]=useState(null);const [sq,setSq]=useState("");const [cf,setCf]=useState("All");
-  const blank={name:"",category:CATS[0],brand:"",color:"",fabric:"",qtyType:"meter",barcode:gbc(),hiddenCode:ghc(1),rack:"",stock:0,costPrice:0,salePrice:0,offerPrice:"",offerStart:"",offerEnd:"",supplier:"",bonus:0,maxDiscount:10};
+  const blank={name:"",category:CATS[0],brand:"",color:"",fabric:"",qtyType:"meter",barcode:gbc(),hiddenCode:ghc(1),rack:"",stock:0,costPrice:0,salePrice:0,offerPrice:"",offerStart:"",offerEnd:"",supplier:"",bonus:0,maxDiscount:10,size_type:"meter",available_sizes:[]};
   const [fm,setFm]=useState(blank);
   const fl=prods.filter(p=>(cf==="All"||p.category===cf)&&(p.name.toLowerCase().includes(sq.toLowerCase())||p.barcode.includes(sq)));
-  const save=()=>{if(!fm.name||!fm.salePrice)return alert("Naam aur price zaroori!");const o={...fm,id:ep?ep.id:gid(),stock:+fm.stock,costPrice:+fm.costPrice,salePrice:+fm.salePrice,offerPrice:fm.offerPrice?+fm.offerPrice:null,bonus:+fm.bonus,maxDiscount:+fm.maxDiscount||10};ep?setProds(p=>p.map(x=>x.id===ep.id?o:x)):setProds(p=>[...p,o]);log("Inventory",`${fm.name} ${ep?"updated":"added"}`);setSf(false);setEp(null);setFm({...blank,barcode:gbc(),hiddenCode:ghc(prods.length+1)});};
+
+  const save=async()=>{
+    if(!fm.name||!fm.salePrice)return alert("Naam aur price zaroori!");
+    const o={...fm,id:ep?ep.id:gid(),stock:+fm.stock,costPrice:+fm.costPrice,salePrice:+fm.salePrice,offerPrice:fm.offerPrice?+fm.offerPrice:null,bonus:+fm.bonus,maxDiscount:+fm.maxDiscount||10,size_type:fm.size_type||"meter",available_sizes:fm.available_sizes||[]};
+    ep?setProds(p=>p.map(x=>x.id===ep.id?o:x)):setProds(p=>[...p,o]);
+    log("Inventory",`${fm.name} ${ep?"updated":"added"}`);
+
+    // Supabase sync — website_status = pending (admin panel mein jayega)
+    if(supabase){
+      await supabase.from("products").upsert({
+        id:o.id, name:o.name, brand:o.brand, color:o.color, fabric:o.fabric,
+        category:o.category, rack:o.rack, stock:o.stock,
+        cost_price:o.costPrice, sale_price:o.salePrice,
+        qty_type:o.qtyType, barcode:o.barcode, bonus:o.bonus,
+        max_discount:o.maxDiscount, offer_price:o.offerPrice,
+        offer_start:o.offerStart, offer_end:o.offerEnd, supplier:o.supplier,
+        size_type:o.size_type, available_sizes:JSON.stringify(o.available_sizes),
+        website_status: ep ? undefined : "pending", // naya product = pending
+      });
+      // Alert create karo agar naya product hai
+      if(!ep){
+        await supabase.from("website_alerts").insert({
+          id:Date.now(), type:"new_product", product_id:o.id,
+          product_name:o.name,
+          message:`New product added: "${o.name}" — Rs.${o.salePrice}. List on website?`,
+          is_read:false,
+        });
+      }
+    }
+    setSf(false);setEp(null);setFm({...blank,barcode:gbc(),hiddenCode:ghc(prods.length+1)});
+  };
+
   const isOff=(p)=>p.offerPrice&&p.offerStart&&p.offerEnd&&td()>=p.offerStart&&td()<=p.offerEnd;
+
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",flexWrap:"wrap",gap:"6px"}}><div style={css.h1}>📦 {t.inventory}</div><button onClick={()=>{setEp(null);setFm({...blank,barcode:gbc(),hiddenCode:ghc(prods.length+1)});setSf(true);}} style={css.btn()}>+ Add</button></div>
@@ -951,7 +1010,7 @@ function Inventory({T,t,css,prods,setProds,supps,isAdmin,gid,pkr,td,log,BarcodeS
       <div style={{fontSize:"11px",color:T.muted,margin:"4px 0 8px"}}>{fl.length} products | Value: {pkr(fl.reduce((a,p)=>a+p.stock*p.costPrice,0))}</div>
       <div style={{overflowX:"auto"}}>
         <table style={css.tbl}>
-          <thead><tr>{["#","Naam","Cat","Stock","Cost","Sale","Barcode","Offer","Actions"].map(h=><th key={h} style={css.th}>{h}</th>)}</tr></thead>
+          <thead><tr>{["#","Naam","Cat","Stock","Cost","Sale","Size","Barcode","Actions"].map(h=><th key={h} style={css.th}>{h}</th>)}</tr></thead>
           <tbody>{fl.map((p,i)=>(
             <tr key={p.id} style={{background:p.stock<=5?T.danger+"11":"transparent"}}>
               <td style={css.td}>{i+1}</td>
@@ -960,33 +1019,54 @@ function Inventory({T,t,css,prods,setProds,supps,isAdmin,gid,pkr,td,log,BarcodeS
               <td style={css.td}><span style={css.badge(p.stock<=5?T.danger:T.success)}>{p.stock} {p.qtyType}</span></td>
               <td style={css.td}>{pkr(p.costPrice)}</td>
               <td style={css.td}><strong style={{color:T.accent}}>{pkr(p.salePrice)}</strong></td>
+              <td style={css.td}><span style={{fontSize:"10px",color:T.muted}}>{p.size_type==="stitched"?(p.available_sizes||[]).join(","):`${p.size_type||"meter"}`}</span></td>
               <td style={css.td}><div style={{background:"#fff",borderRadius:"3px",padding:"2px",display:"inline-block"}}><BarcodeSVG value={p.barcode} width={80} height={22} showText={false}/></div><div style={{fontSize:"9px",color:T.muted}}>{p.barcode}</div></td>
-              <td style={css.td}>{isOff(p)?<span style={css.badge(T.accent)}>🏷️{pkr(p.offerPrice)}</span>:<span style={{color:T.muted}}>—</span>}</td>
-              <td style={css.td}><div style={css.row}><button onClick={()=>{setEp(p);setFm({...p});setSf(true);}} style={{...css.btn(T.info),padding:"3px 6px"}}>✏️</button><button onClick={()=>{if(confirm("Delete karo?"))setProds(pr=>pr.filter(x=>x.id!==p.id));log("Delete",p.name);}} style={{...css.btn(T.danger),padding:"3px 6px"}}>🗑️</button></div></td>
+              <td style={css.td}><div style={css.row}><button onClick={()=>{setEp(p);setFm({...p,available_sizes:p.available_sizes||[]});setSf(true);}} style={{...css.btn(T.info),padding:"3px 6px"}}>✏️</button><button onClick={()=>{if(confirm("Delete karo?"))setProds(pr=>pr.filter(x=>x.id!==p.id));log("Delete",p.name);}} style={{...css.btn(T.danger),padding:"3px 6px"}}>🗑️</button></div></td>
             </tr>
           ))}</tbody>
         </table>
       </div>
-      {sf&&<div style={css.modal}><div style={css.mb("580px")}><div style={{fontWeight:"800",color:T.accent,marginBottom:"12px"}}>{ep?"✏️":"➕"} Product</div><div style={css.g2}>{[["name","Naam","text"],["brand","Brand","text"],["color","Rang","text"],["fabric","Fabric","text"],["rack","Rack","text"],["stock","Stock","number"],["costPrice","Cost Price","number"],["salePrice","Sale Price","number"],["maxDiscount","Max Disc %","number"],["offerPrice","Offer Price","number"],["offerStart","Offer Start","date"],["offerEnd","Offer End","date"],["bonus","Bonus Rs (Salesman)","number"],["barcode","Barcode","text"],["supplier","Supplier","text"]].map(([k,l,tp])=><div key={k}><label style={css.lbl}>{l}</label><input type={tp} value={fm[k]||""} onChange={e=>setFm({...fm,[k]:e.target.value})} style={css.inp}/></div>)}<div><label style={css.lbl}>Category</label><select value={fm.category} onChange={e=>setFm({...fm,category:e.target.value})} style={css.sel}>{CATS.map(c=><option key={c} value={c}>{c}</option>)}</select></div><div><label style={css.lbl}>Qty Type</label><select value={fm.qtyType} onChange={e=>setFm({...fm,qtyType:e.target.value})} style={css.sel}><option value="meter">Meter</option><option value="gaz">Gaz</option><option value="piece">Piece</option></select></div></div>
-        <div style={{background:T.surface,borderRadius:"6px",padding:"8px",marginTop:"8px"}}>
-          <div style={{fontSize:"10px",color:T.muted,marginBottom:"4px"}}>🔲 Product QR Code (scan se product dhundho)</div>
-          <div style={{background:"#fff",borderRadius:"4px",padding:"4px",display:"inline-block"}}>
-            <svg viewBox="0 0 80 80" width="80" height="80" xmlns="http://www.w3.org/2000/svg">
-              {/* Simple QR-like pattern showing barcode value */}
-              <rect width="80" height="80" fill="white"/>
-              <rect x="2" y="2" width="20" height="20" fill="none" stroke="#000" strokeWidth="2"/>
-              <rect x="6" y="6" width="12" height="12" fill="#000"/>
-              <rect x="58" y="2" width="20" height="20" fill="none" stroke="#000" strokeWidth="2"/>
-              <rect x="62" y="6" width="12" height="12" fill="#000"/>
-              <rect x="2" y="58" width="20" height="20" fill="none" stroke="#000" strokeWidth="2"/>
-              <rect x="6" y="62" width="12" height="12" fill="#000"/>
-              <text x="40" y="44" textAnchor="middle" fontSize="5" fill="#000" fontFamily="monospace">{(fm.barcode||"").slice(0,12)}</text>
-              <text x="40" y="52" textAnchor="middle" fontSize="4" fill="#666" fontFamily="monospace">{fm.name?.slice(0,16)||""}</text>
-            </svg>
-          </div>
-          <div style={{fontSize:"9px",color:T.muted,marginTop:"3px"}}>Barcode: <code style={{color:T.accent}}>{fm.barcode}</code></div>
+      {sf&&<div style={css.modal}><div style={css.mb("620px")}><div style={{fontWeight:"800",color:T.accent,marginBottom:"12px"}}>{ep?"✏️":"➕"} Product</div><div style={css.g2}>{[["name","Naam","text"],["brand","Brand","text"],["color","Rang","text"],["fabric","Fabric","text"],["rack","Rack","text"],["stock","Stock","number"],["costPrice","Cost Price","number"],["salePrice","Sale Price","number"],["maxDiscount","Max Disc %","number"],["offerPrice","Offer Price","number"],["offerStart","Offer Start","date"],["offerEnd","Offer End","date"],["bonus","Bonus Rs (Salesman)","number"],["barcode","Barcode","text"],["supplier","Supplier","text"]].map(([k,l,tp])=><div key={k}><label style={css.lbl}>{l}</label><input type={tp} value={fm[k]||""} onChange={e=>setFm({...fm,[k]:e.target.value})} style={css.inp}/></div>)}<div><label style={css.lbl}>Category</label><select value={fm.category} onChange={e=>setFm({...fm,category:e.target.value})} style={css.sel}>{CATS.map(c=><option key={c} value={c}>{c}</option>)}</select></div><div><label style={css.lbl}>Qty Type</label><select value={fm.qtyType} onChange={e=>setFm({...fm,qtyType:e.target.value})} style={css.sel}><option value="meter">Meter</option><option value="gaz">Gaz</option><option value="piece">Piece</option></select></div></div>
+
+        {/* Sizing Section */}
+        <div style={{background:T.surface,borderRadius:"8px",padding:"12px",marginTop:"8px",border:`1px solid ${T.border}`}}>
+          <div style={{fontWeight:"700",fontSize:"12px",color:T.accent,marginBottom:"8px"}}>📏 Sizing / Measurements</div>
+          <label style={css.lbl}>Size Type</label>
+          <select value={fm.size_type||"meter"} onChange={e=>setFm({...fm,size_type:e.target.value,available_sizes:[]})} style={css.sel}>
+            <option value="meter">Meter (Unstitched)</option>
+            <option value="gaz">Gaz (Unstitched)</option>
+            <option value="stitched">Stitched — S/M/L/XL</option>
+            <option value="free">Free Size (One Size)</option>
+          </select>
+
+          {fm.size_type==="stitched"&&(
+            <div style={{marginTop:"8px"}}>
+              <label style={css.lbl}>Available Sizes (select jo available hain)</label>
+              <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginTop:"4px"}}>
+                {["XS","S","M","L","XL","XXL"].map(sz=>{
+                  const has=(fm.available_sizes||[]).includes(sz);
+                  return(
+                    <button key={sz} type="button" onClick={()=>{
+                      const cur=fm.available_sizes||[];
+                      setFm({...fm,available_sizes:has?cur.filter(x=>x!==sz):[...cur,sz]});
+                    }} style={{padding:"6px 14px",borderRadius:"8px",border:`2px solid ${has?T.accent:T.border}`,background:has?T.accent+"22":"transparent",color:has?T.accent:T.muted,fontWeight:"700",fontSize:"12px",cursor:"pointer",transition:"all 0.2s"}}>
+                      {sz}
+                    </button>
+                  );
+                })}
+              </div>
+              {(fm.available_sizes||[]).length>0&&<div style={{fontSize:"10px",color:T.success,marginTop:"4px"}}>✓ Selected: {(fm.available_sizes||[]).join(", ")}</div>}
+            </div>
+          )}
+
+          {(fm.size_type==="meter"||fm.size_type==="gaz")&&(
+            <div style={{marginTop:"6px",fontSize:"11px",color:T.muted}}>
+              📌 Stock field mein {fm.size_type==="meter"?"meters":"gaz"} likhein (e.g. 2.5)
+            </div>
+          )}
         </div>
-        <div style={{...css.row,marginTop:"12px"}}><button onClick={save} style={{...css.btn(),flex:1}}>💾 Save</button><button onClick={()=>setSf(false)} style={css.btnO}>Wapas</button></div></div></div>}
+
+        <div style={{...css.row,marginTop:"12px"}}><button onClick={save} style={{...css.btn(),flex:1}}>💾 Save + Send to Admin Panel</button><button onClick={()=>setSf(false)} style={css.btnO}>Wapas</button></div></div></div>}
     </div>
   );
 }
