@@ -375,12 +375,27 @@ export default function App() {
   const [syncStatus,setSyncStatus]=useState(supabase?"🔄 Connecting...":"💾 Local Only");
   const [isOnline,setIsOnline]=useState(navigator.onLine);
   const [waModal,setWaModal]=useState(null);
+  const [pwaInstall,setPwaInstall]=useState(null);
   const openWA=(phone,message)=>setWaModal({phone,message});
   useEffect(()=>{
+    // Online/offline detection
     const up=()=>{setIsOnline(true);setSyncStatus("🔄 Syncing...");flushQueue().then(()=>setSyncStatus("✅ Synced"));};
     const dn=()=>{setIsOnline(false);setSyncStatus("📴 Offline");};
     window.addEventListener("online",up);window.addEventListener("offline",dn);
-    return()=>{window.removeEventListener("online",up);window.removeEventListener("offline",dn);};
+    // Service Worker register
+    if("serviceWorker" in navigator){
+      navigator.serviceWorker.register("/service-worker.js")
+        .then(reg=>console.log("[ERP] SW registered:",reg.scope))
+        .catch(err=>console.warn("[ERP] SW failed:",err));
+    }
+    // PWA install prompt
+    const onInstall=(e)=>{e.preventDefault();setPwaInstall(e);};
+    window.addEventListener("beforeinstallprompt",onInstall);
+    return()=>{
+      window.removeEventListener("online",up);
+      window.removeEventListener("offline",dn);
+      window.removeEventListener("beforeinstallprompt",onInstall);
+    };
   },[]);
   const [lastSync,setLastSync]=useState("");
   const [showNotifs,setShowNotifs]=useState(false);
