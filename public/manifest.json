@@ -1,0 +1,46 @@
+{
+  "short_name": "Jameel ERP",
+  "name": "Jameel Fabrics ERP",
+  "description": "Jameel Fabrics Kunjah — Smart ERP System",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#c9a84c",
+  "background_color": "#0a0a0a",
+  "categories": ["business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "POS — Billing",
+      "short_name": "POS",
+      "description": "Seedha billing karo",
+      "url": "/#pos",
+      "icons": [{"src": "logo192.png", "sizes": "192x192"}]
+    },
+    {
+      "name": "Inventory",
+      "short_name": "Stock",
+      "description": "Products dekho",
+      "url": "/#inventory",
+      "icons": [{"src": "logo192.png", "sizes": "192x192"}]
+    }
+  ]
+}
