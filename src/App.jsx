@@ -54,11 +54,12 @@ const db = {
 // JAMEEL FABRICS SMART ERP v6.0 — Supabase Sync
 
 const THEMES = {
-  "Black Gold": {bg:"#0a0a0a",surface:"#141414",card:"#1a1a1a",border:"#2a2a2a",accent:"#c9a84c",text:"#f5f0e8",muted:"#777",danger:"#e05252",success:"#4caf7d",info:"#5296e0"},
-  "Royal Blue": {bg:"#050d1a",surface:"#0a1628",card:"#0f1f3a",border:"#1a3050",accent:"#4a90e2",text:"#e8f0f8",muted:"#7a9bbf",danger:"#e05252",success:"#4caf7d",info:"#c49af0"},
-  "Dark Green": {bg:"#050f08",surface:"#0a1a0d",card:"#0f2214",border:"#1a3820",accent:"#4caf7d",text:"#e8f5ed",muted:"#7aaa8a",danger:"#e05252",success:"#7dd4a0",info:"#4a90e2"},
-  "Red Black":  {bg:"#0a0505",surface:"#140a0a",card:"#1a0f0f",border:"#2a1515",accent:"#e05252",text:"#f8e8e8",muted:"#aa7a7a",danger:"#e05252",success:"#4caf7d",info:"#4a90e2"},
-  "White Gold": {bg:"#fafaf7",surface:"#f5f2e8",card:"#ffffff",border:"#e8dfc0",accent:"#c9a84c",text:"#2c2416",muted:"#8a7a5a",danger:"#c0392b",success:"#4a7c59",info:"#2980b9"}
+  "Modern Blue": {bg:"#f4f6fb",surface:"#eef2f9",card:"#ffffff",border:"#e3e8f0",accent:"#2563eb",text:"#1e293b",muted:"#64748b",danger:"#dc2626",success:"#16a34a",info:"#0ea5e9",btnText:"#ffffff"},
+  "Black Gold": {bg:"#0a0a0a",surface:"#141414",card:"#1a1a1a",border:"#2a2a2a",accent:"#c9a84c",text:"#f5f0e8",muted:"#777",danger:"#e05252",success:"#4caf7d",info:"#5296e0",btnText:"#000000"},
+  "Royal Blue": {bg:"#050d1a",surface:"#0a1628",card:"#0f1f3a",border:"#1a3050",accent:"#4a90e2",text:"#e8f0f8",muted:"#7a9bbf",danger:"#e05252",success:"#4caf7d",info:"#c49af0",btnText:"#ffffff"},
+  "Dark Green": {bg:"#050f08",surface:"#0a1a0d",card:"#0f2214",border:"#1a3820",accent:"#4caf7d",text:"#e8f5ed",muted:"#7aaa8a",danger:"#e05252",success:"#7dd4a0",info:"#4a90e2",btnText:"#06210f"},
+  "Red Black":  {bg:"#0a0505",surface:"#140a0a",card:"#1a0f0f",border:"#2a1515",accent:"#e05252",text:"#f8e8e8",muted:"#aa7a7a",danger:"#e05252",success:"#4caf7d",info:"#4a90e2",btnText:"#ffffff"},
+  "White Gold": {bg:"#fafaf7",surface:"#f5f2e8",card:"#ffffff",border:"#e8dfc0",accent:"#c9a84c",text:"#2c2416",muted:"#8a7a5a",danger:"#c0392b",success:"#4a7c59",info:"#2980b9",btnText:"#ffffff"}
 };
 
 const T_RO = {
@@ -251,24 +252,24 @@ const SEED = {
 };
 
 // ── CSS Factory ───────────────────────────────────────────────
-function mkCSS(T){return{
-  app:{fontFamily:"'Nunito','Segoe UI',sans-serif",background:T.bg,color:T.text,minHeight:"100vh",display:"flex",flexDirection:"column"},
-  card:{background:T.card,border:`1px solid ${T.border}`,borderRadius:"12px",padding:"16px",marginBottom:"12px"},
-  btn:(c=T.accent)=>({background:c,color:"#000",border:"none",borderRadius:"8px",padding:"7px 13px",cursor:"pointer",fontWeight:"700",fontSize:"12px"}),
-  btnO:{background:"transparent",color:T.accent,border:`1px solid ${T.accent}`,borderRadius:"8px",padding:"6px 12px",cursor:"pointer",fontWeight:"700",fontSize:"12px"},
-  iBtn:{background:"transparent",color:T.text,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"4px 8px",cursor:"pointer",fontSize:"13px"},
-  inp:{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"7px 10px",color:T.text,fontSize:"12px",width:"100%",boxSizing:"border-box",outline:"none"},
-  sel:{background:T.surface,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"7px 10px",color:T.text,fontSize:"12px",width:"100%",boxSizing:"border-box"},
-  lbl:{fontSize:"11px",color:T.muted,display:"block",marginBottom:"2px",marginTop:"8px"},
-  badge:(c)=>({background:c+"22",color:c,padding:"2px 6px",borderRadius:"20px",fontSize:"10px",fontWeight:"700",display:"inline-block"}),
+function mkCSS(T){const BT=T.btnText||"#000";const SH="0 1px 2px rgba(15,23,42,.04), 0 2px 8px rgba(15,23,42,.06)";return{
+  app:{fontFamily:"'Nunito','Segoe UI',system-ui,sans-serif",background:T.bg,color:T.text,minHeight:"100vh",display:"flex",flexDirection:"column"},
+  card:{background:T.card,border:`1px solid ${T.border}`,borderRadius:"14px",padding:"16px",marginBottom:"12px",boxShadow:SH},
+  btn:(c=T.accent)=>({background:c,color:BT,border:"none",borderRadius:"9px",padding:"8px 15px",cursor:"pointer",fontWeight:"700",fontSize:"12px",boxShadow:"0 1px 2px rgba(15,23,42,.08)"}),
+  btnO:{background:"transparent",color:T.accent,border:`1.5px solid ${T.accent}`,borderRadius:"9px",padding:"7px 13px",cursor:"pointer",fontWeight:"700",fontSize:"12px"},
+  iBtn:{background:T.card,color:T.text,border:`1px solid ${T.border}`,borderRadius:"8px",padding:"5px 9px",cursor:"pointer",fontSize:"13px"},
+  inp:{background:T.card,border:`1px solid ${T.border}`,borderRadius:"9px",padding:"8px 11px",color:T.text,fontSize:"12px",width:"100%",boxSizing:"border-box",outline:"none"},
+  sel:{background:T.card,border:`1px solid ${T.border}`,borderRadius:"9px",padding:"8px 11px",color:T.text,fontSize:"12px",width:"100%",boxSizing:"border-box"},
+  lbl:{fontSize:"11px",color:T.muted,display:"block",marginBottom:"3px",marginTop:"8px",fontWeight:"600"},
+  badge:(c)=>({background:c+"1f",color:c,padding:"2px 8px",borderRadius:"20px",fontSize:"10px",fontWeight:"700",display:"inline-block"}),
   tbl:{width:"100%",borderCollapse:"collapse"},
-  th:{background:T.surface,padding:"8px 10px",textAlign:"left",fontSize:"11px",color:T.muted,fontWeight:"700",borderBottom:`1px solid ${T.border}`},
-  td:{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,fontSize:"12px"},
-  sc:(c)=>({background:T.card,border:`1px solid ${c}33`,borderRadius:"12px",padding:"13px 16px",borderLeft:`4px solid ${c}`}),
-  h1:{fontSize:"16px",fontWeight:"800",color:T.accent,marginBottom:"12px"},
+  th:{background:T.surface,padding:"9px 11px",textAlign:"left",fontSize:"11px",color:T.muted,fontWeight:"700",borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:".3px"},
+  td:{padding:"9px 11px",borderBottom:`1px solid ${T.border}`,fontSize:"12px"},
+  sc:(c)=>({background:T.card,border:`1px solid ${T.border}`,borderRadius:"14px",padding:"15px 17px",borderLeft:`4px solid ${c}`,boxShadow:SH}),
+  h1:{fontSize:"17px",fontWeight:"800",color:T.text,marginBottom:"14px",letterSpacing:"-.2px"},
   h2:{fontSize:"13px",fontWeight:"700",color:T.text,marginBottom:"6px"},
-  modal:{position:"fixed",inset:0,background:"#000b",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"12px"},
-  mb:(w="500px")=>({background:T.card,border:`1px solid ${T.border}`,borderRadius:"16px",padding:"20px",width:w,maxWidth:"100%",maxHeight:"90vh",overflow:"auto"}),
+  modal:{position:"fixed",inset:0,background:"rgba(15,23,42,.5)",backdropFilter:"blur(3px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"12px"},
+  mb:(w="500px")=>({background:T.card,border:`1px solid ${T.border}`,borderRadius:"16px",padding:"22px",width:w,maxWidth:"100%",maxHeight:"90vh",overflow:"auto",boxShadow:"0 20px 60px rgba(15,23,42,.25)"}),
   row:{display:"flex",gap:"8px",flexWrap:"wrap"},
   g2:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 12px"},
 };}
@@ -277,7 +278,7 @@ function mkCSS(T){return{
 // MAIN APP
 // ══════════════════════════════════════════════════════════════
 export default function App() {
-  const [theme,setTheme] = useState(()=>LS.get("theme","Black Gold"));
+  const [theme,setTheme] = useState(()=>LS.get("theme","Modern Blue"));
   const [lang,setLang]   = useState(()=>LS.get("lang","ro"));
   const [user,setUser]   = useState(null);
   const [mod,setMod]     = useState("dashboard");
