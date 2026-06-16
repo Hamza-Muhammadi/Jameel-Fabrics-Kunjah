@@ -801,9 +801,45 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
     setBill(s);setCart([]);setDisc(0);setDiscPct(0);setPaid(0);setPaid2(0);setSplitPay(false);setDealing("");
   };
 
+  // Hold / Resume bills (park a customer's cart, serve another, resume later)
+  const [held,setHeld]=useState(()=>LS.get("pos_held",[]));
+  useEffect(()=>{LS.set("pos_held",held);},[held]);
+  const holdBill=()=>{
+    if(!cart.length)return alert("Cart khali hai!");
+    setHeld(h=>[...h,{id:gid(),label:cust!=="Walk-in"?cust:("Hold "+(h.length+1)),time:new Date().toLocaleTimeString(),total:tot,cart,cust,sman,dealing,disc,discPct,pay,pay2,splitPay,paid,paid2,tpl}]);
+    setCart([]);setDisc(0);setDiscPct(0);setPaid(0);setPaid2(0);setSplitPay(false);setDealing("");setCust("Walk-in");
+  };
+  const resumeBill=(hb)=>{
+    if(cart.length&&!confirm("Mojooda cart par dosra bill resume karein? (current cart hold karein pehle)"))return;
+    setCart(hb.cart||[]);setCust(hb.cust||"Walk-in");setSman(hb.sman||user.name);setDealing(hb.dealing||"");
+    setDisc(hb.disc||0);setDiscPct(hb.discPct||0);setPay(hb.pay||"Cash");setPay2(hb.pay2||"Easypaisa");
+    setSplitPay(hb.splitPay||false);setPaid(hb.paid||0);setPaid2(hb.paid2||0);setTpl(hb.tpl||"standard");
+    setHeld(h=>h.filter(x=>x.id!==hb.id));
+  };
+
+  // Barcode scan: scanner types the code then Enter → add the exact match
+  const onScan=(e)=>{
+    if(e.key!=="Enter")return;
+    const code=sq.trim();if(!code)return;
+    const m=ap.find(p=>p.barcode&&String(p.barcode)===code);
+    if(m){add(m);setSq("");}
+  };
+
   return(
     <div>
       <div style={css.h1}>🧾 {t.pos}</div>
+
+      {held.length>0&&<div style={{...css.card,padding:"10px 12px",marginBottom:"10px"}}>
+        <div style={{fontSize:"11px",fontWeight:"700",color:T.muted,marginBottom:"6px",textTransform:"uppercase",letterSpacing:".3px"}}>⏸️ Held Bills ({held.length})</div>
+        <div style={{display:"flex",gap:"7px",flexWrap:"wrap"}}>
+          {held.map(hb=>(
+            <div key={hb.id} style={{display:"flex",alignItems:"center",gap:"6px",background:T.surface,border:`1px solid ${T.border}`,borderRadius:"20px",padding:"4px 6px 4px 12px"}}>
+              <button onClick={()=>resumeBill(hb)} style={{background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:"11px",fontWeight:"700"}}>{hb.label} · {pkr(hb.total||0)} <span style={{color:T.muted,fontWeight:"400"}}>· {hb.time}</span></button>
+              <button onClick={()=>setHeld(h=>h.filter(x=>x.id!==hb.id))} style={{...css.btn(T.danger),padding:"1px 6px",fontSize:"10px"}}>✕</button>
+            </div>
+          ))}
+        </div>
+      </div>}
       <div style={{display:"grid",gridTemplateColumns:"310px 1fr",gap:"12px",alignItems:"start"}}>
         {/* LEFT — Cart & Bill */}
         <div style={{...css.card,position:"sticky",top:0}}>
@@ -856,6 +892,7 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
             {rem>0&&<div style={{color:T.danger,fontSize:"10px",marginTop:"3px"}}>⚠️ Baaki: {pkr(rem)} → Udhaar</div>}
             <div style={{...css.row,marginTop:"6px"}}>
               <button onClick={()=>setShowCalc(true)} style={{...css.btnO,padding:"6px 10px",fontSize:"11px"}}>🧮</button>
+              <button onClick={holdBill} style={{...css.btn(T.info),padding:"10px 12px",fontSize:"12px"}}>⏸️ Hold</button>
               <button onClick={checkout} style={{...css.btn(),flex:1,padding:"10px",fontSize:"13px"}}>✅ Checkout & Print</button>
             </div>
           </div>
@@ -864,7 +901,7 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
         {/* RIGHT — Products */}
         <div>
           <div style={css.row}>
-            <input value={sq} onChange={e=>setSq(e.target.value)} style={{...css.inp,flex:1}} placeholder="🔍 Naam, barcode, rang..."/>
+            <input value={sq} onChange={e=>setSq(e.target.value)} onKeyDown={onScan} style={{...css.inp,flex:1}} placeholder="🔍 Naam / barcode (scan + Enter) / rang..."/>
             <select value={cf} onChange={e=>setCf(e.target.value)} style={{...css.sel,width:"170px"}}>
               <option value="All">All</option>{CATS.map(c=><option key={c} value={c}>{c.split(" ").slice(0,2).join(" ")}</option>)}
             </select>
