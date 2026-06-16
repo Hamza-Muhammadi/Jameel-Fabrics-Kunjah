@@ -196,6 +196,28 @@ function buildBill(bill,tpl="standard",msg="Shukriya! Dobara tashreef layen 🙏
   const tots=`${bill.discount>0?`<tr><td colspan="3" style="text-align:right;font-size:12px;font-weight:900;color:red">Discount:</td><td style="text-align:right;font-size:12px;font-weight:900;color:red">-Rs.${Number(bill.discount).toLocaleString()}</td></tr>`:""}<tr style="border-top:2px solid #000"><td colspan="3" style="text-align:right;font-size:14px;font-weight:900;padding:4px 1px">TOTAL:</td><td style="text-align:right;font-size:14px;font-weight:900;padding:4px 1px">Rs.${Number(bill.total).toLocaleString()}</td></tr><tr><td colspan="3" style="text-align:right;font-size:12px;font-weight:900;padding:3px 1px">Paid:</td><td style="text-align:right;font-size:12px;font-weight:900;color:green;padding:3px 1px">Rs.${Number(bill.paid).toLocaleString()}</td></tr><tr><td colspan="3" style="text-align:right;font-size:13px;font-weight:900;color:${bill.remaining>0?"red":"green"};padding:3px 1px">Remaining:</td><td style="text-align:right;font-size:13px;font-weight:900;color:${bill.remaining>0?"red":"green"};padding:3px 1px">Rs.${Number(bill.remaining).toLocaleString()}</td></tr>`;
   const P=`<div style="font-size:10px;font-weight:900;text-align:center;line-height:1.8">Receipt k baghair wapsi nahi<br/>Sale/Offer items non-returnable<br/>Exchange 2-3 din andar</div>`;
   const F=`<div style="text-align:center;font-size:11px;font-weight:900;margin-top:4px">${msg}<br/>TikTok:${si.tiktok||""} | IG:${si.instagram||""} | WA:${si.phone}</div>`;
+  if(tpl==="premium")return`<div style="width:72mm;font-family:Arial,'Segoe UI',sans-serif;color:#000;font-weight:600">
+    <div style="border:2px solid #000;padding:7px 6px;text-align:center;margin-bottom:6px">
+      <div style="font-size:18px;font-weight:900;letter-spacing:1px">${si.name.toUpperCase()}</div>
+      <div style="font-size:8px;letter-spacing:2px">PREMIUM FABRICS &middot; SINCE 1975</div>
+      <div style="font-size:10px;margin-top:3px">${si.address}</div>
+      <div style="font-size:10px">Tel / WhatsApp: ${si.phone}</div>
+    </div>
+    <div style="font-size:11px;display:flex;justify-content:space-between"><span>Bill #${String(bill.id).slice(-6)}</span><span>${bill.date}</span></div>
+    <div style="font-size:11px">Customer: ${bill.customer||"Walk-in"}${bill.phone?" &middot; "+bill.phone:""}</div>
+    <div style="font-size:11px;margin-bottom:3px">By: ${bill.salesman}${bill.dealing?" / "+bill.dealing:""} &middot; Pay: ${bill.payment}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;font-weight:700">
+      <thead><tr><th style="text-align:left;border-top:1.5px solid #000;border-bottom:1.5px solid #000;padding:3px 1px">ITEM</th><th style="text-align:center;border-top:1.5px solid #000;border-bottom:1.5px solid #000">QTY</th><th style="text-align:right;border-top:1.5px solid #000;border-bottom:1.5px solid #000">RATE</th><th style="text-align:right;border-top:1.5px solid #000;border-bottom:1.5px solid #000">AMT</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${bill.discount>0?`<div style="text-align:right;font-size:11px;margin-top:3px">Discount: -Rs.${Number(bill.discount).toLocaleString()}</div>`:""}
+    <div style="border:2px solid #000;text-align:center;padding:5px;margin:5px 0"><span style="font-size:17px;font-weight:900">TOTAL &nbsp; Rs.${Number(bill.total).toLocaleString()}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700"><span>Paid: Rs.${Number(bill.paid).toLocaleString()}</span><span>Baaki: Rs.${Number(bill.remaining).toLocaleString()}</span></div>
+    <div style="border-top:1px dashed #000;margin:5px 0"></div>
+    ${P}
+    <div style="text-align:center;font-size:11px;font-weight:700;margin-top:5px">${msg}</div>
+    <div style="text-align:center;font-size:9px;margin-top:2px">IG: ${si.instagram||""} &nbsp;&middot;&nbsp; TikTok: ${si.tiktok||""}</div>
+  </div>`;
   if(tpl==="simple")return`<div style="width:72mm;font-family:'Courier New',monospace;font-weight:900">${H}${D}<div style="font-size:11px;font-weight:900">Date:${bill.date} | #${String(bill.id).slice(-6)} | By:${bill.salesman}${bill.dealing?"/"+bill.dealing:""}</div>${D}${bill.items.map(i=>`<div style="font-weight:900">${i.name} ${i.qty}${i.unit} x Rs.${Number(i.price).toLocaleString()} = Rs.${Number(i.total).toLocaleString()}</div>`).join("")}${D}<div style="text-align:right;font-size:15px;font-weight:900">TOTAL: Rs.${Number(bill.total).toLocaleString()}</div><div style="text-align:right;font-weight:900">Paid: Rs.${Number(bill.paid).toLocaleString()}</div><div style="text-align:right;color:${bill.remaining>0?"red":"green"};font-weight:900">Remaining: Rs.${Number(bill.remaining).toLocaleString()}</div>${D}${P}${D}${F}</div>`;
   return`<div style="width:72mm;font-family:'Courier New',monospace;font-weight:900">${H}${D}${I}${D}<table style="width:100%;border-collapse:collapse;font-weight:900"><thead><tr><th style="text-align:left;font-size:11px;font-weight:900;border-bottom:2px solid #000;padding:3px 1px">Item</th><th style="text-align:center;font-size:11px;font-weight:900;border-bottom:2px solid #000;padding:3px 1px">Qty</th><th style="text-align:right;font-size:11px;font-weight:900;border-bottom:2px solid #000;padding:3px 1px">Rate</th><th style="text-align:right;font-size:11px;font-weight:900;border-bottom:2px solid #000;padding:3px 1px">Amt</th></tr></thead><tbody>${rows}</tbody><tfoot>${tots}</tfoot></table>${D}${P}${D}${F}</div>`;
 }
@@ -758,7 +780,7 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
   const [cf,setCf]=useState("All");
   const [qi,setQi]=useState({});
   const [bill,setBill]=useState(null);
-  const [tpl,setTpl]=useState("standard");
+  const [tpl,setTpl]=useState("premium");
   const [showDR,setShowDR]=useState(false);
   const [drNote,setDrNote]=useState("");
   const [custMsg,setCustMsg]=useState("Shukriya! Dobara tashreef layen 🙏");
@@ -855,7 +877,7 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
           <label style={css.lbl}>Dealing Person (Thermal pe)</label>
           <input value={dealing} onChange={e=>setDealing(e.target.value)} style={css.inp} placeholder="Dealing karne wala naam..."/>
           <label style={css.lbl}>Bill Template</label>
-          <select value={tpl} onChange={e=>setTpl(e.target.value)} style={css.sel}><option value="standard">Standard</option><option value="simple">Simple</option></select>
+          <select value={tpl} onChange={e=>setTpl(e.target.value)} style={css.sel}><option value="premium">⭐ Premium</option><option value="standard">Standard</option><option value="simple">Simple</option></select>
           <div style={{maxHeight:"160px",overflow:"auto",margin:"7px 0",borderTop:`1px solid ${T.border}`,paddingTop:"5px"}}>
             {cart.length===0?<div style={{color:T.muted,textAlign:"center",padding:"10px",fontSize:"11px"}}>Cart khali</div>:cart.map(item=>(
               <div key={item.pid} style={{display:"flex",alignItems:"center",gap:"3px",padding:"3px 0",borderBottom:`1px solid ${T.border}`,fontSize:"10px"}}>
@@ -950,7 +972,7 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
         </div>
         <div style={{...css.row,marginTop:"10px"}}>
           <button onClick={()=>silentPrint(buildBill(bill,tpl,custMsg,shopInfo))} style={{...css.btn(),flex:1}}>🖨️ Print</button>
-          <button onClick={()=>window.open(`https://wa.me/92${(bill.phone||"").replace(/^0/,"")}?text=${encodeURIComponent(`*${shopInfo?.name||"JAMEEL FABRICS"}*\nBill#${String(bill.id).slice(-6)}\nTotal: Rs.${bill.total}\nPaid: Rs.${bill.paid}${bill.remaining>0?`\nBaaki: Rs.${bill.remaining}`:""}`)}`)} style={{...css.btn(T.success),flex:1}}>📱 WA</button>
+          <button onClick={()=>{const msg=`*${(shopInfo?.name||"JAMEEL FABRICS").toUpperCase()}*\n_Premium Fabrics · Since 1975_\n\n🧾 Bill #${String(bill.id).slice(-6)}  ·  ${bill.date}\nCustomer: ${bill.customer||"Walk-in"}\nBy: ${bill.salesman}\n────────────\n${bill.items.map(it=>`• ${it.name} (${it.qty}${it.unit})  Rs.${Number(it.total).toLocaleString()}`).join("\n")}\n────────────\n${bill.discount>0?`Discount: -Rs.${Number(bill.discount).toLocaleString()}\n`:""}*TOTAL: Rs.${Number(bill.total).toLocaleString()}*\nPaid: Rs.${Number(bill.paid).toLocaleString()}${bill.remaining>0?`\n⚠️ Baaki: Rs.${Number(bill.remaining).toLocaleString()}`:""}\n\nShukriya! Dobara tashreef layen 🙏\n📞 ${shopInfo?.phone||""}`;window.open(`https://wa.me/92${(bill.phone||"").replace(/^0/,"")}?text=${encodeURIComponent(msg)}`);}} style={{...css.btn(T.success),flex:1}}>📱 WA Receipt</button>
           <button onClick={()=>setBill(null)} style={css.btnO}>✕</button>
         </div>
       </div></div>}
