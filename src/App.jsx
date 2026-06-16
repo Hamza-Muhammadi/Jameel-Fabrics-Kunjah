@@ -763,6 +763,10 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
   const [drNote,setDrNote]=useState("");
   const [custMsg,setCustMsg]=useState("Shukriya! Dobara tashreef layen 🙏");
   const [showDiscModal,setShowDiscModal]=useState(false);
+  const [fav,setFav]=useState(()=>LS.get("pos_fav",[]));
+  useEffect(()=>{LS.set("pos_fav",fav);},[fav]);
+  const [favOnly,setFavOnly]=useState(false);
+  const toggleFav=(id)=>setFav(f=>f.includes(id)?f.filter(x=>x!==id):[...f,id]);
 
   const now=td();
   // Advance booking alert for walk-in customers
@@ -772,7 +776,7 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
     if(p.offerPrice&&p.offerStart&&p.offerEnd&&now>=p.offerStart&&now<=p.offerEnd)return{...p,_ep:p.offerPrice,_off:true};
     return{...p,_ep:p.salePrice,_off:false};
   });
-  const fl=ap.filter(p=>(cf==="All"||p.category===cf)&&(p.name.toLowerCase().includes(sq.toLowerCase())||p.barcode.includes(sq)||p.color.toLowerCase().includes(sq.toLowerCase())));
+  const fl=ap.filter(p=>(cf==="All"||p.category===cf)&&(!favOnly||fav.includes(p.id))&&(p.name.toLowerCase().includes(sq.toLowerCase())||p.barcode.includes(sq)||p.color.toLowerCase().includes(sq.toLowerCase())));
 
   const add=(p)=>{
     if(bookedProducts.includes(p.id)&&cust==="Walk-in"){
@@ -855,7 +859,7 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
           <div style={{maxHeight:"160px",overflow:"auto",margin:"7px 0",borderTop:`1px solid ${T.border}`,paddingTop:"5px"}}>
             {cart.length===0?<div style={{color:T.muted,textAlign:"center",padding:"10px",fontSize:"11px"}}>Cart khali</div>:cart.map(item=>(
               <div key={item.pid} style={{display:"flex",alignItems:"center",gap:"3px",padding:"3px 0",borderBottom:`1px solid ${T.border}`,fontSize:"10px"}}>
-                <div style={{flex:1}}><div style={{fontWeight:"600"}}>{item.name}</div><div style={{color:T.muted}}>{item.unit}</div></div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontWeight:"600"}}>{item.name} <span style={{color:T.muted,fontWeight:"400"}}>{item.unit}</span></div><select value={item.itemSman||sman} onChange={e=>setCart(cart.map(c=>c.pid===item.pid?{...c,itemSman:e.target.value}:c))} style={{...css.sel,padding:"0 3px",fontSize:"9px",marginTop:"1px",width:"100%",height:"18px"}} title="Deal by (staff bonus)">{[user.name,...emps.map(e=>e.name)].filter((v,i,a)=>a.indexOf(v)===i).map(n=><option key={n} value={n}>👤 {n}</option>)}</select></div>
                 <input type="number" value={item.qty} onChange={e=>setCart(cart.map(c=>c.pid===item.pid?{...c,qty:+e.target.value||0,total:(+e.target.value||0)*c.price}:c))} style={{...css.inp,width:"40px",padding:"2px 4px"}}/>
                 <input type="number" value={item.price} onChange={e=>setCart(cart.map(c=>c.pid===item.pid?{...c,price:+e.target.value||0,total:c.qty*(+e.target.value||0)}:c))} style={{...css.inp,width:"60px",padding:"2px 4px"}}/>
                 <span style={{color:T.accent,fontWeight:"700",width:"56px",fontSize:"11px"}}>{pkr(item.total)}</span>
@@ -905,12 +909,16 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
             <select value={cf} onChange={e=>setCf(e.target.value)} style={{...css.sel,width:"170px"}}>
               <option value="All">All</option>{CATS.map(c=><option key={c} value={c}>{c.split(" ").slice(0,2).join(" ")}</option>)}
             </select>
+            <button onClick={()=>setFavOnly(f=>!f)} title="Sirf favorites" style={{...css.btn(favOnly?"#f5a623":T.surface),color:favOnly?"#fff":T.text,border:`1px solid ${T.border}`,padding:"8px 12px"}}>{favOnly?"★":"☆"} Fav</button>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:"7px",marginTop:"8px",maxHeight:"calc(100vh - 200px)",overflow:"auto"}}>
             {fl.map(p=>(
               <div key={p.id} style={{background:T.card,border:`1px solid ${p.stock<=5?T.danger+"55":p._off?T.accent+"44":T.border}`,borderRadius:"9px",padding:"9px"}}>
                 {p._off&&<div style={{...css.badge(T.accent),fontSize:"9px",marginBottom:"3px"}}>🏷️ OFFER</div>}
-                <div style={{fontWeight:"700",fontSize:"11px",marginBottom:"2px"}}>{p.name}</div>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"4px"}}>
+                  <div style={{fontWeight:"700",fontSize:"11px",marginBottom:"2px"}}>{p.name}</div>
+                  <button onClick={()=>toggleFav(p.id)} title="Favorite" style={{background:"none",border:"none",cursor:"pointer",fontSize:"14px",lineHeight:1,padding:0,color:fav.includes(p.id)?"#f5a623":T.muted}}>{fav.includes(p.id)?"★":"☆"}</button>
+                </div>
                 <div style={{fontSize:"10px",color:T.muted,marginBottom:"4px"}}>{p.color}•{p.rack}•{p.qtyType}</div>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}>
                   <div>{p._off&&<div style={{fontSize:"9px",color:T.muted,textDecoration:"line-through"}}>{pkr(p.salePrice)}</div>}<span style={{color:T.accent,fontWeight:"700",fontSize:"12px"}}>{pkr(p._ep)}</span></div>
