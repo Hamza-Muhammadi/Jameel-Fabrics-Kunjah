@@ -562,7 +562,7 @@ export default function App() {
   );
 
   // Backup
-  const doBackup=()=>{const data={users,prods,custs,emps,supps,sales,exps,udh,att,dmg,ret,cc,sal,pi,bk,dr,logs,supRet,shopInfo,sysPin,exportDate:new Date().toLocaleString()};const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));a.download=`jameel-backup-${td()}.json`;a.click();};
+  const doBackup=()=>{const data={users,prods,custs,emps,supps,sales,exps,udh,att,dmg,ret,cc,sal,pi,bk,dr,logs,supRet,shopInfo,sysPin,exportDate:new Date().toLocaleString()};const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));a.download=`jameel-backup-${td()}.json`;a.click();LS.set("lastBackup",td());};
   const doRestore=(file)=>{const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(d.prods)setProds(d.prods);if(d.custs)setCusts(d.custs);if(d.emps)setEmps(d.emps);if(d.supps)setSupps(d.supps);if(d.sales)setSales(d.sales);if(d.exps)setExps(d.exps);if(d.udh)setUdh(d.udh);if(d.att)setAtt(d.att);if(d.dmg)setDmg(d.dmg);if(d.ret)setRet(d.ret);if(d.cc)setCc(d.cc);if(d.sal)setSal(d.sal);if(d.pi)setPi(d.pi);if(d.bk)setBk(d.bk);if(d.dr)setDr(d.dr);if(d.supRet)setSupRet(d.supRet);if(d.shopInfo)setShopInfo(d.shopInfo);alert("✅ Backup restore ho gaya!");log("Backup","Restored");}catch{alert("❌ File invalid!");}};r.readAsText(file);};
 
   const sp = {T,t,css,isAdmin,isManager,td,gid,pkr,mon,log,BarcodeSVG,svgStr,db,syncProd,syncSale,syncCust,syncExp,syncUdh,syncEmp,syncSupp,syncShop,openWA,publishWeb,webStock};
@@ -773,6 +773,8 @@ function Dashboard({T,t,css,todayTotal,todayOnline,todayExp,todayProfit,pendingU
   const [target,setTarget]=useState(()=>LS.get("sales_target",0));
   useEffect(()=>{LS.set("sales_target",target);},[target]);
   const pct=target>0?Math.min(100,Math.round(todayTotal/target*100)):0;
+  const lastBackup=LS.get("lastBackup",null);
+  const backupDays=lastBackup?Math.floor((Date.now()-new Date(lastBackup).getTime())/86400000):999;
   return(
     <div>
       <div style={css.h1}>📊 {t.dashboard} <span style={{fontSize:"11px",color:T.muted,fontWeight:"400"}}>— {td()}</span></div>
@@ -781,6 +783,7 @@ function Dashboard({T,t,css,todayTotal,todayOnline,todayExp,todayProfit,pendingU
           <div key={i} style={css.sc(s.c)}><div style={{fontSize:"18px"}}>{s.i}</div><div style={{fontSize:"17px",fontWeight:"900",color:s.c}}>{s.v}</div><div style={{fontSize:"10px",color:T.muted}}>{s.l}</div></div>
         ))}
       </div>
+      {backupDays>=3&&<div style={{...css.card,borderLeft:`4px solid ${T.danger}`,marginBottom:"12px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"6px"}}><div style={{fontSize:"12px",fontWeight:"700",color:T.danger}}>💾 {lastBackup?`Backup ${backupDays} din purana hai`:"Aap ne abhi tak backup nahi liya"} — Settings me jaa kar backup le lo (data safety)</div></div>}
       <div style={{...css.card,marginBottom:"12px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px",flexWrap:"wrap",gap:"6px"}}>
           <div style={{fontWeight:"700",fontSize:"12px"}}>🎯 Aaj ka Sales Target</div>
@@ -1206,12 +1209,18 @@ function Inventory({T,t,css,prods,setProds,supps,isAdmin,gid,pkr,td,log,BarcodeS
   const [sf,setSf]=useState(false);const [ep,setEp]=useState(null);const [sq,setSq]=useState("");const [cf,setCf]=useState("All");
   const blank={name:"",category:CATS[0],brand:"",color:"",fabric:"",qtyType:"meter",barcode:gbc(),hiddenCode:ghc(1),rack:"",stock:0,costPrice:0,salePrice:0,offerPrice:"",offerStart:"",offerEnd:"",supplier:"",bonus:0,maxDiscount:10,rollSize:"",img1:"",img2:"",img3:"",listOnWeb:false,display_stock_text:"",size_type:"free",badge_type:""};
   const [fm,setFm]=useState(blank);
+  const [audit,setAudit]=useState(false);const [counts,setCounts]=useState({});
+  const applyAudit=()=>{const changed=prods.filter(p=>counts[p.id]!==undefined&&counts[p.id]!==""&&+counts[p.id]!==+p.stock);if(!changed.length)return alert("Koi farq nahi mila / koi count nahi daala.");if(!window.confirm(`${changed.length} products ka stock update hoga (counted = naya stock). Pakka?`))return;changed.forEach(p=>setProds(pr=>pr.map(x=>x.id===p.id?{...x,stock:+counts[p.id]}:x)));log("Stock Audit",`${changed.length} products adjusted`);setCounts({});setAudit(false);alert("✅ Stock audit apply ho gaya!");};
   const fl=prods.filter(p=>(cf==="All"||p.category===cf)&&(p.name.toLowerCase().includes(sq.toLowerCase())||p.barcode.includes(sq)));
   const save=async()=>{if(!fm.name||!fm.salePrice)return alert("Naam aur price zaroori!");let o={...fm,id:ep?ep.id:gid(),stock:+fm.stock,costPrice:+fm.costPrice,salePrice:+fm.salePrice,offerPrice:fm.offerPrice?+fm.offerPrice:null,bonus:+fm.bonus,maxDiscount:+fm.maxDiscount||10};if(fm.listOnWeb&&publishWeb){const wid=await publishWeb(o);if(wid){o={...o,webId:wid,webStatus:"pending"};alert("🌐 Website ke 'Pending' me bhej diya!\nWebsite admin → Pending me ja kar photos/edit kar ke Publish karein.");}}ep?setProds(p=>p.map(x=>x.id===ep.id?o:x)):setProds(p=>[...p,o]);log("Inventory",`${fm.name} ${ep?"updated":"added"}`);setSf(false);setEp(null);setFm({...blank,barcode:gbc(),hiddenCode:ghc(prods.length+1)});};
   const isOff=(p)=>p.offerPrice&&p.offerStart&&p.offerEnd&&td()>=p.offerStart&&td()<=p.offerEnd;
   return(
     <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",flexWrap:"wrap",gap:"6px"}}><div style={css.h1}>📦 {t.inventory}</div><button onClick={()=>{setEp(null);setFm({...blank,barcode:gbc(),hiddenCode:ghc(prods.length+1)});setSf(true);}} style={css.btn()}>+ Add</button></div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",flexWrap:"wrap",gap:"6px"}}><div style={css.h1}>📦 {t.inventory}</div><div style={css.row}><button onClick={()=>{setAudit(a=>!a);setCounts({});}} style={css.btn(audit?"#a052e0":T.surface)}>📋 Stock Audit</button><button onClick={()=>{setEp(null);setFm({...blank,barcode:gbc(),hiddenCode:ghc(prods.length+1)});setSf(true);}} style={css.btn()}>+ Add</button></div></div>
+      {audit&&<div style={{...css.card,borderLeft:`4px solid #a052e0`,marginBottom:"10px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px",flexWrap:"wrap",gap:"6px"}}><div style={{fontWeight:"700",color:"#a052e0",fontSize:"12px"}}>📋 Stock Audit — gini hui qty daalo, system se farq dikhega</div><button onClick={applyAudit} style={css.btn(T.success)}>✅ Apply Adjustments</button></div>
+        <div style={{overflowX:"auto",maxHeight:"320px"}}><table style={css.tbl}><thead><tr>{["Product","System","Counted","Farq"].map(h=><th key={h} style={css.th}>{h}</th>)}</tr></thead><tbody>{fl.map(p=>{const c=counts[p.id];const diff=c!==undefined&&c!==""?+c-+p.stock:null;return<tr key={p.id}><td style={css.td}><strong>{p.name}</strong><div style={{fontSize:"9px",color:T.muted}}>{p.barcode}</div></td><td style={css.td}>{p.stock} {p.qtyType}</td><td style={css.td}><input type="number" value={c===undefined?"":c} onChange={e=>setCounts(q=>({...q,[p.id]:e.target.value}))} style={{...css.inp,width:"70px",padding:"3px 5px"}} placeholder="—"/></td><td style={css.td}>{diff===null?"—":<span style={{color:diff===0?T.success:T.danger,fontWeight:"700"}}>{diff>0?"+":""}{diff.toFixed(2)}</span>}</td></tr>;})}</tbody></table></div>
+      </div>}
       <div style={css.row}>
         <input value={sq} onChange={e=>setSq(e.target.value)} style={{...css.inp,flex:1}} placeholder="🔍 Search..."/>
         <select value={cf} onChange={e=>setCf(e.target.value)} style={{...css.sel,width:"180px"}}><option value="All">All</option>{CATS.map(c=><option key={c} value={c}>{c}</option>)}</select>
@@ -2150,6 +2159,18 @@ function Reports({T,t,css,sales,exps,prods,emps,custs,supps,sal,dmg,cc,att,pkr,t
     return{...p,revenue,cost,profit:revenue-cost,qty};
   }).filter(p=>p.revenue>0).sort((a,b)=>b.profit-a.profit);
 
+  // ── Monthly Profit & Loss statement ──
+  const plSales=ms.filter(s=>!isWebOnline(s));
+  const plSale=plSales.reduce((a,s)=>a+s.total,0);
+  const plCOGS=plSales.reduce((a,s)=>a+(s.items||[]).reduce((b,i)=>{const p=prods.find(pr=>pr.id===(i.pid??i.productId));return b+((p?p.costPrice:0)*(Number(i.qty)||0));},0),0);
+  const plGross=plSale-plCOGS;
+  const plExp=exps.filter(e=>e.date.startsWith(selMonth)&&e.type!=="Salary").reduce((a,e)=>a+Number(e.amount),0);
+  const plSalary=(sal||[]).filter(s=>(s.date||"").startsWith(selMonth)).reduce((a,s)=>a+Number(s.net||0),0);
+  const plDmg=(dmg||[]).filter(d=>(d.date||"").startsWith(selMonth)).reduce((a,d)=>a+Number(d.total||0),0);
+  const plNet=plGross-plExp-plSalary-plDmg;
+  const plRows=[["Sales (Shop, online alag)",plSale,"pos"],["− Cost of Goods Sold",plCOGS,"neg"],["= Gross Profit",plGross,"sub"],["− Expenses (non-salary)",plExp,"neg"],["− Salaries Paid",plSalary,"neg"],["− Damaged Loss",plDmg,"neg"],["= NET PROFIT",plNet,"net"]];
+  const exportPLPDF=()=>exportPDF(`<h1>🧵 Jameel Fabrics — Profit & Loss</h1><div style="font-size:11px;color:#666">Month: ${selMonth}</div><table><tr><th>Item</th><th style="text-align:right">Amount</th></tr>${plRows.map(([l,v])=>`<tr><td>${l}</td><td style="text-align:right">Rs.${Number(v).toLocaleString()}</td></tr>`).join("")}</table>`,"Profit & Loss");
+
   // PDF Export
   const exportPDF=(content,title)=>{
     const f=document.createElement("iframe");f.style.cssText="position:fixed;width:0;height:0;border:0;left:-9999px";document.body.appendChild(f);
@@ -2208,7 +2229,7 @@ function Reports({T,t,css,sales,exps,prods,emps,custs,supps,sal,dmg,cc,att,pkr,t
     `,"Profit Per Product Report");
   };
 
-  const tabs=[{k:"daily",l:"📅 Aaj"},{k:"monthly",l:"📆 Maheena"},{k:"compare",l:"📊 Comparison"},{k:"profit",l:"💰 Profit"},{k:"stock",l:"📦 Stock"},{k:"category",l:"🏷️ Category"},{k:"salesman",l:"👤 Salesman"},{k:"customer",l:"👥 Customer"}];
+  const tabs=[{k:"daily",l:"📅 Aaj"},{k:"monthly",l:"📆 Maheena"},{k:"pl",l:"📊 P&L"},{k:"compare",l:"📊 Comparison"},{k:"profit",l:"💰 Profit"},{k:"stock",l:"📦 Stock"},{k:"category",l:"🏷️ Category"},{k:"salesman",l:"👤 Salesman"},{k:"customer",l:"👥 Customer"}];
 
   return(
     <div>
@@ -2217,13 +2238,25 @@ function Reports({T,t,css,sales,exps,prods,emps,custs,supps,sal,dmg,cc,att,pkr,t
         <div style={css.row}>
           {tab==="daily"&&<button onClick={exportDailyPDF} style={{...css.btn(T.info),fontSize:"11px"}}>📄 PDF</button>}
           {tab==="monthly"&&<button onClick={exportMonthlyPDF} style={{...css.btn(T.info),fontSize:"11px"}}>📄 PDF</button>}
+          {tab==="pl"&&<button onClick={exportPLPDF} style={{...css.btn(T.info),fontSize:"11px"}}>📄 PDF</button>}
           {tab==="profit"&&<button onClick={exportProfitPDF} style={{...css.btn(T.info),fontSize:"11px"}}>📄 PDF</button>}
           <button onClick={()=>setUl(false)} style={css.btnO}>🔒 Lock</button>
         </div>
       </div>
       <div style={{...css.row,marginBottom:"10px",flexWrap:"wrap"}}>{tabs.map(tb=><button key={tb.k} onClick={()=>setTab(tb.k)} style={{...css.btn(tab===tb.k?T.accent:T.surface),border:`1px solid ${T.border}`,color:tab===tb.k?"#000":T.text,fontSize:"11px"}}>{tb.l}</button>)}</div>
 
-      {(tab==="monthly"||tab==="salesman")&&<div style={{marginBottom:"8px"}}><label style={css.lbl}>Maheena Select</label><input type="month" value={selMonth} onChange={e=>setSelMonth(e.target.value)} style={{...css.inp,width:"160px"}}/></div>}
+      {(tab==="monthly"||tab==="salesman"||tab==="pl")&&<div style={{marginBottom:"8px"}}><label style={css.lbl}>Maheena Select</label><input type="month" value={selMonth} onChange={e=>setSelMonth(e.target.value)} style={{...css.inp,width:"160px"}}/></div>}
+
+      {tab==="pl"&&<div>
+        <div style={css.h2}>📊 Profit & Loss — {selMonth}</div>
+        <div style={{...css.card,maxWidth:"460px"}}>
+          {plRows.map(([l,v,kind],i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"7px 4px",borderBottom:kind==="net"?"none":`1px solid ${T.border}`,borderTop:kind==="net"?`2px solid ${T.accent}`:"none",fontSize:kind==="net"?"15px":"12px",fontWeight:kind==="net"||kind==="sub"?"900":"600",background:kind==="net"?T.accent+"11":"transparent"}}>
+            <span style={{color:kind==="neg"?T.danger:kind==="net"?(plNet>=0?T.success:T.danger):T.text}}>{l}</span>
+            <span style={{color:kind==="neg"?T.danger:kind==="sub"?T.accent:kind==="net"?(plNet>=0?T.success:T.danger):T.text}}>{pkr(v)}</span>
+          </div>)}
+          <div style={{fontSize:"9px",color:T.muted,marginTop:"8px"}}>💡 COGS = beche gaye maal ki lagat. Salary expenses se alag li gayi hai (double count na ho). Website-online sale isme nahi.</div>
+        </div>
+      </div>}
 
       {tab==="daily"&&<div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"8px",marginBottom:"10px"}}>{[{l:"Sale",v:pkr(tt),c:T.success},{l:"Kharcha",v:pkr(te),c:T.danger},{l:"Munafa",v:pkr(tt-te),c:T.accent},{l:"Bills",v:ts.length,c:T.info}].map((s,i)=><div key={i} style={css.sc(s.c)}><div style={{fontSize:"15px",fontWeight:"800",color:s.c}}>{s.v}</div><div style={{fontSize:"10px",color:T.muted}}>{s.l}</div></div>)}</div>
