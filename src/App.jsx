@@ -325,8 +325,12 @@ export default function App() {
   const [showGSearch,setShowGSearch] = useState(false);
   const gSearchRef = useRef(null);
   const pinTimer = useRef(null);
+  const [showAlerts,setShowAlerts] = useState(false);
+  const [webPending,setWebPending] = useState(0);
   // Ctrl+K / Cmd+K → focus global search from anywhere
   useEffect(()=>{const h=(e)=>{if((e.ctrlKey||e.metaKey)&&String(e.key).toLowerCase()==="k"){e.preventDefault();setShowGSearch(true);if(gSearchRef.current)gSearchRef.current.focus();}};window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h);},[]);
+  // Website orders pending count (for the alerts bell)
+  useEffect(()=>{if(!supabase)return;const load=()=>supabase.from("online_orders").select("id",{count:"exact",head:true}).eq("status","pending").then(({count})=>setWebPending(count||0)).catch(()=>{});load();const iv=setInterval(load,60000);return()=>clearInterval(iv);},[]);
   const shopInfoDef = {name:"Jameel Fabrics Kunjah",address:"Circular Road Kunjah, Distt Gujrat",phone:"03008722232",whatsapp:"03008722232",tiktok:"@jameelfabrics",instagram:"@jameelfabrics",website:"jameelfabrics.vercel.app"};
 
   const [users,setUsers]   = useState(()=>LS.get("users",SEED.users));
@@ -399,6 +403,21 @@ export default function App() {
   const pendingUdh = udh.reduce((a,u)=>a+u.remaining,0);
   const lowStock   = prods.filter(p=>p.stock<=5);
   const pendingDR  = dr.filter(d=>d.status==="Pending");
+
+  // ── Unified Alerts (bell) ──
+  const _td=td();
+  const alUdhaar  = udh.filter(u=>u.remaining>0&&u.dueDate&&u.dueDate<=_td);
+  const alBookings= (bk||[]).filter(b=>b.status!=="Delivered"&&b.status!=="Cancelled"&&b.deliveryDate&&b.deliveryDate<=_td);
+  const alBirthday= custs.filter(c=>c.birthday&&c.birthday.slice(5)===_td.slice(5));
+  const alerts = [
+    {k:"weborders",i:"🛒",c:T.info,n:webPending,l:"Website orders pending"},
+    {k:"udhaar",   i:"⚠️",c:T.danger,n:alUdhaar.length,l:"Udhaar due/overdue"},
+    {k:"booking",  i:"📋",c:"#e0a052",n:alBookings.length,l:"Booking delivery due"},
+    {k:"inventory",i:"📦",c:T.danger,n:lowStock.length,l:"Low stock items"},
+    {k:"customers",i:"🎂",c:T.success,n:alBirthday.length,l:"Aaj birthday"},
+    {k:"discounts",i:"🎯",c:"#a052e0",n:pendingDR.length,l:"Discount requests"},
+  ].filter(a=>a.n>0);
+  const alertCount = alerts.reduce((a,x)=>a+x.n,0);
 
   // Low stock sound alert — MUST be before any conditional return
   useEffect(()=>{
@@ -643,6 +662,13 @@ export default function App() {
           </div>}
         </div>}
         <span style={{fontSize:"10px",color:syncing?"#e0a052":syncStatus.includes("✅")?"#4caf7d":"#e05252",background:T.surface,padding:"2px 8px",borderRadius:"10px",border:`1px solid ${T.border}`}}>{syncStatus}{lastSync&&` — ${lastSync}`}</span>
+        <div style={{position:"relative"}}>
+          <button onClick={()=>setShowAlerts(v=>!v)} title="Alerts" style={{...css.btn(T.surface),color:T.text,border:`1px solid ${T.border}`,padding:"4px 8px",fontSize:"13px",position:"relative"}}>🔔{alertCount>0&&<span style={{position:"absolute",top:"-6px",right:"-6px",background:T.danger,color:"#fff",borderRadius:"10px",fontSize:"9px",fontWeight:"800",padding:"1px 5px",minWidth:"16px"}}>{alertCount}</span>}</button>
+          {showAlerts&&<div style={{position:"absolute",top:"34px",right:0,width:"240px",background:T.card,border:`1px solid ${T.border}`,borderRadius:"10px",zIndex:1000,boxShadow:"0 8px 24px #0006",overflow:"hidden"}}>
+            <div style={{padding:"8px 10px",fontWeight:"800",fontSize:"12px",borderBottom:`1px solid ${T.border}`}}>🔔 Alerts {alertCount>0?`(${alertCount})`:""}</div>
+            {alerts.length===0?<div style={{padding:"14px",textAlign:"center",color:T.muted,fontSize:"11px"}}>✅ Sab clear hai!</div>:alerts.map(a=><div key={a.k} onClick={()=>{setMod(a.k);setShowAlerts(false);}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",cursor:"pointer",borderBottom:`1px solid ${T.border}33`,fontSize:"11px"}}><span>{a.i} {a.l}</span><span style={{background:a.c,color:"#fff",borderRadius:"10px",fontSize:"10px",fontWeight:"800",padding:"1px 7px"}}>{a.n}</span></div>)}
+          </div>}
+        </div>
         <span style={css.badge(isAdmin?T.accent:isManager?T.info:T.success)}>{user.role}</span>
         <span style={{fontSize:"11px",color:T.muted,maxWidth:"80px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.name}</span>
         <button onClick={()=>setTheme(["Modern Blue","White Gold","Eid Green"].includes(theme)?"Black Gold":"Modern Blue")} title="Light / Dark" style={{...css.btn(T.surface),color:T.text,border:`1px solid ${T.border}`,padding:"4px 7px",fontSize:"12px"}}>{["Modern Blue","White Gold","Eid Green"].includes(theme)?"🌙":"☀️"}</button>
