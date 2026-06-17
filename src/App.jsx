@@ -1471,6 +1471,9 @@ function Udhaar({T,t,css,udh,setUdh,gid,pkr,td,log}) {
   const [fm,setFm]=useState({customerName:"",phone:"",totalAmount:0,paid:0,dueDate:"",notes:""});
   const tot=udh.reduce((a,u)=>a+u.remaining,0);
   const fl=udh.filter(u=>(filt==="all"||(filt==="pending"?u.remaining>0:u.remaining<=0))&&(u.customerName.toLowerCase().includes(sq.toLowerCase())||u.phone.includes(sq)));
+  // Reminders: customers whose promised (due) date is today or already past, still owing
+  const dueToday=udh.filter(u=>u.remaining>0&&u.dueDate&&u.dueDate<=td());
+  const remindMsg=(u)=>`Assalam o Alaikum ${u.customerName}! *Jameel Fabrics* se reminder — aap ne ${u.dueDate} ko Rs.${Number(u.remaining).toLocaleString()} adaigi ka wada kiya tha. Meherbani farma kar payment kar dein. Shukriya 🙏`;
   const add=()=>{const a=+fm.totalAmount,p=+fm.paid;setUdh(prev=>[...prev,{...fm,id:gid(),totalAmount:a,paid:p,remaining:a-p,date:td()}]);log("Udhaar",`${fm.customerName} — Rs.${fm.totalAmount}`);setSf(false);setFm({customerName:"",phone:"",totalAmount:0,paid:0,dueDate:"",notes:""});};
   const recv=(u,amt)=>{const a=amt||+(pa[u.id]||0);if(!a)return alert("Amount dalo!");setUdh(prev=>prev.map(x=>x.id===u.id?{...x,paid:x.paid+a,remaining:Math.max(0,x.remaining-a)}:x));log("Udhaar Payment",`${u.customerName} — Rs.${a}`);setPa({...pa,[u.id]:""});};
   const del=(id)=>{if(confirm("Delete karo?"))setUdh(u=>u.filter(x=>x.id!==id));};
@@ -1478,6 +1481,21 @@ function Udhaar({T,t,css,udh,setUdh,gid,pkr,td,log}) {
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}><div style={css.h1}>💸 {t.udhaar}</div><button onClick={()=>setSf(true)} style={css.btn()}>+ Add</button></div>
       <div style={{...css.sc(T.danger),marginBottom:"12px"}}><div style={{fontSize:"20px",fontWeight:"900",color:T.danger}}>{pkr(tot)}</div><div style={{fontSize:"10px",color:T.muted}}>Pending — {udh.filter(u=>u.remaining>0).length} customers</div></div>
+
+      {dueToday.length>0&&<div style={{...css.card,borderLeft:`4px solid ${T.danger}`,marginBottom:"12px"}}>
+        <div style={{fontWeight:"800",color:T.danger,marginBottom:"4px"}}>🔔 Aaj ke Reminders ({dueToday.length})</div>
+        <div style={{fontSize:"10px",color:T.muted,marginBottom:"8px"}}>In customers ne aaj/pehle adaigi ka wada kiya tha — reminder bhej do</div>
+        {dueToday.map(u=>(
+          <div key={u.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px",padding:"6px 0",borderTop:`1px solid ${T.border}`}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontWeight:"700",fontSize:"12px"}}>{u.customerName} <span style={{color:T.muted,fontSize:"10px",fontWeight:"400"}}>📞{u.phone}</span></div>
+              <div style={{fontSize:"10px",color:T.danger}}>Baaki: {pkr(u.remaining)} · Wada: {u.dueDate}{u.dueDate<td()?" ⚠️ (overdue)":" (aaj)"}</div>
+            </div>
+            <button onClick={()=>{if(confirm(`${u.customerName} ko reminder bhejein?`))window.open(`https://wa.me/92${u.phone.replace(/^0/,"")}?text=${encodeURIComponent(remindMsg(u))}`);}} style={{...css.btn(T.success),flexShrink:0,fontSize:"11px"}}>📱 Reminder</button>
+          </div>
+        ))}
+      </div>}
+
       <div style={css.row}>
         <input value={sq} onChange={e=>setSq(e.target.value)} style={{...css.inp,flex:1}} placeholder="🔍 Search..."/>
         {["pending","all","cleared"].map(f=><button key={f} onClick={()=>setFilt(f)} style={{...css.btn(filt===f?T.accent:T.surface),border:`1px solid ${T.border}`,color:filt===f?"#000":T.text,fontSize:"10px"}}>{f==="pending"?"⏳ Baaki":f==="all"?"📋 All":"✅ Cleared"}</button>)}
