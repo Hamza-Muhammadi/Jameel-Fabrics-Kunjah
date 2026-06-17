@@ -223,6 +223,7 @@ function buildBill(bill,tpl="standard",msg="Shukriya! Dobara tashreef layen 🙏
     ${P}
     <div style="text-align:center;font-size:11px;font-weight:700;margin-top:5px">${msg}</div>
     <div style="text-align:center;font-size:9px;margin-top:2px">IG: ${si.instagram||""} &nbsp;&middot;&nbsp; TikTok: ${si.tiktok||""}</div>
+    ${si.payQR?`<div style="text-align:center;margin-top:6px;border-top:1px dashed #000;padding-top:5px"><div style="font-size:10px;font-weight:900">📲 Scan to Pay — EasyPaisa / JazzCash</div><img src="${si.payQR}" style="width:36mm;height:36mm;object-fit:contain;margin-top:3px"/></div>`:""}
   </div>`;
   if(tpl==="simple")return`<div style="width:72mm;font-family:'Courier New',monospace;font-weight:900">${H}${D}<div style="font-size:11px;font-weight:900">Date:${bill.date} | #${String(bill.id).slice(-6)} | By:${bill.salesman}${bill.dealing?"/"+bill.dealing:""}</div>${D}${bill.items.map(i=>`<div style="font-weight:900">${i.name} ${i.qty}${i.unit} x Rs.${Number(i.price).toLocaleString()} = Rs.${Number(i.total).toLocaleString()}</div>`).join("")}${D}<div style="text-align:right;font-size:15px;font-weight:900">TOTAL: Rs.${Number(bill.total).toLocaleString()}</div><div style="text-align:right;font-weight:900">Paid: Rs.${Number(bill.paid).toLocaleString()}</div><div style="text-align:right;color:${bill.remaining>0?"red":"green"};font-weight:900">Remaining: Rs.${Number(bill.remaining).toLocaleString()}</div>${D}${P}${D}${F}</div>`;
   return`<div style="width:72mm;font-family:'Courier New',monospace;font-weight:900">${H}${D}${I}${D}<table style="width:100%;border-collapse:collapse;font-weight:900"><thead><tr><th style="text-align:left;font-size:11px;font-weight:900;border-bottom:2px solid #000;padding:3px 1px">Item</th><th style="text-align:center;font-size:11px;font-weight:900;border-bottom:2px solid #000;padding:3px 1px">Qty</th><th style="text-align:right;font-size:11px;font-weight:900;border-bottom:2px solid #000;padding:3px 1px">Rate</th><th style="text-align:right;font-size:11px;font-weight:900;border-bottom:2px solid #000;padding:3px 1px">Amt</th></tr></thead><tbody>${rows}</tbody><tfoot>${tots}</tfoot></table>${D}${P}${D}${F}</div>`;
@@ -1504,7 +1505,13 @@ function Thermal({T,t,css,sales,buildBill,silentPrint,pkr,shopInfo}) {
 // ── CUSTOMERS ─────────────────────────────────────────────────
 function Customers({T,t,css,custs,setCusts,sales,gid,pkr,log,td}) {
   const [sf,setSf]=useState(false);const [ec,setEc]=useState(null);const [sq,setSq]=useState("");const [vc,setVc]=useState(null);const [lf,setLf]=useState("All");
-  const blank={name:"",phone:"",whatsapp:"",address:"",city:"Kunjah",notes:"",loyalty:"Silver",totalPurchases:0,udhaar:0,visits:0};const [fm,setFm]=useState(blank);
+  const blank={name:"",phone:"",whatsapp:"",address:"",city:"Kunjah",notes:"",loyalty:"Silver",birthday:"",totalPurchases:0,udhaar:0,visits:0};const [fm,setFm]=useState(blank);
+  // ── Bundle D: WhatsApp broadcast + birthday reminders ──
+  const [bc,setBc]=useState(false);
+  const [bcMsg,setBcMsg]=useState("Assalam o Alaikum! 🧵 Jameel Fabrics me nayi arrivals aa gayi hain — aaj hi tashreef layen. Shukriya!");
+  const [bcAud,setBcAud]=useState("All");
+  const waLink=(c,msg)=>`https://wa.me/92${String(c.whatsapp||c.phone||"").replace(/\D/g,"").replace(/^92/,"").replace(/^0/,"")}?text=${encodeURIComponent(msg)}`;
+  const bday=custs.filter(c=>c.birthday&&c.birthday.slice(5)===td().slice(5));
   const fl=custs.filter(c=>(lf==="All"||c.loyalty===lf)&&(c.name.toLowerCase().includes(sq.toLowerCase())||c.phone.includes(sq)));
   const save=()=>{if(!fm.name||!fm.phone)return alert("Naam aur phone!");ec?setCusts(c=>c.map(x=>x.id===ec.id?{...x,...fm}:x)):setCusts(c=>[...c,{...fm,id:gid()}]);log("Customer",`${fm.name} ${ec?"updated":"added"}`);setSf(false);setEc(null);setFm(blank);};
   const lc=(l)=>l==="Platinum"?T.accent:l==="Gold"?"#e0a052":l==="VIP"?T.info:T.muted;
@@ -1531,7 +1538,8 @@ function Customers({T,t,css,custs,setCusts,sales,gid,pkr,log,td}) {
   const printStmt=(c)=>{const{rows,bal,deb,cred}=statement(c);printHTML(`<h2>🧵 Jameel Fabrics — Customer Statement</h2><p style="margin:0"><b>${c.name}</b> &nbsp; 📞 ${c.phone||"-"} &nbsp; ${c.city||""}</p><p style="margin:0;color:#666;font-size:11px">Generated: ${new Date().toLocaleString()}</p><table><tr><th>Date</th><th>Detail</th><th>Charge</th><th>Payment</th><th>Balance</th></tr>${rows.map(r=>`<tr><td>${r.date||"-"}</td><td>${r.desc}</td><td>${r.debit?pkr(r.debit):"-"}</td><td style="color:green">${r.credit?pkr(r.credit):"-"}</td><td><b>${pkr(r.bal)}</b></td></tr>`).join("")}</table><div class="total">Total Charge: ${pkr(deb)} | Total Paid: ${pkr(cred)} | <b>Baaki Balance: ${pkr(bal)}</b></div>`,"Customer Statement");};
   return(
     <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}><div style={css.h1}>👥 {t.customers}</div><button onClick={()=>{setEc(null);setFm(blank);setSf(true);}} style={css.btn()}>+ Add</button></div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",flexWrap:"wrap",gap:"6px"}}><div style={css.h1}>👥 {t.customers}</div><div style={css.row}><button onClick={()=>setBc(true)} style={css.btn(T.info)}>📢 Broadcast</button><button onClick={()=>{setEc(null);setFm(blank);setSf(true);}} style={css.btn()}>+ Add</button></div></div>
+      {bday.length>0&&<div style={{...css.card,borderLeft:`4px solid #e0a052`,marginBottom:"10px"}}><div style={{fontWeight:"700",color:"#e0a052",fontSize:"12px",marginBottom:"4px"}}>🎂 Aaj Birthday ({bday.length})</div><div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>{bday.map(c=><button key={c.id} onClick={()=>window.open(waLink(c,`🎂 Happy Birthday ${c.name}! Jameel Fabrics ki taraf se dher saari mubarakbaad. Aaj aap ke liye special discount — tashreef layen! 🎁`))} style={{...css.btn(T.success),fontSize:"10px"}}>🎂 {c.name} — Wish</button>)}</div></div>}
       <div style={css.row}>
         <input value={sq} onChange={e=>setSq(e.target.value)} style={{...css.inp,flex:1}} placeholder="🔍 Naam ya phone..."/>
         <select value={lf} onChange={e=>setLf(e.target.value)} style={{...css.sel,width:"120px"}}><option value="All">All</option>{LOYALTY.map(l=><option key={l} value={l}>{l}</option>)}</select>
@@ -1569,7 +1577,19 @@ function Customers({T,t,css,custs,setCusts,sales,gid,pkr,log,td}) {
         </div>
         <div style={{...css.row,marginTop:"10px"}}><button onClick={()=>printStmt(vc)} style={{...css.btn(),flex:1}}>🖨️ Print Statement</button><button onClick={waStmt} style={{...css.btn(T.success),flex:1}}>📱 WhatsApp Statement</button></div>
       </div></div>);})()}
-      {sf&&<div style={css.modal}><div style={css.mb("420px")}><div style={{fontWeight:"800",color:T.accent,marginBottom:"12px"}}>{ec?"✏️":"➕"} Customer</div><div style={css.g2}>{[["name","Naam","text"],["phone","Phone","text"],["whatsapp","WhatsApp","text"],["address","Pata","text"],["city","Sheher","text"],["notes","Notes","text"]].map(([k,l,tp])=><div key={k}><label style={css.lbl}>{l}</label><input type={tp} value={fm[k]} onChange={e=>setFm({...fm,[k]:e.target.value})} style={css.inp}/></div>)}<div><label style={css.lbl}>Loyalty</label><select value={fm.loyalty} onChange={e=>setFm({...fm,loyalty:e.target.value})} style={css.sel}>{LOYALTY.map(l=><option key={l} value={l}>{l}</option>)}</select></div></div><div style={{...css.row,marginTop:"12px"}}><button onClick={save} style={{...css.btn(),flex:1}}>💾 Save</button><button onClick={()=>setSf(false)} style={css.btnO}>Wapas</button></div></div></div>}
+      {sf&&<div style={css.modal}><div style={css.mb("420px")}><div style={{fontWeight:"800",color:T.accent,marginBottom:"12px"}}>{ec?"✏️":"➕"} Customer</div><div style={css.g2}>{[["name","Naam","text"],["phone","Phone","text"],["whatsapp","WhatsApp","text"],["address","Pata","text"],["city","Sheher","text"],["notes","Notes","text"]].map(([k,l,tp])=><div key={k}><label style={css.lbl}>{l}</label><input type={tp} value={fm[k]} onChange={e=>setFm({...fm,[k]:e.target.value})} style={css.inp}/></div>)}<div><label style={css.lbl}>Loyalty</label><select value={fm.loyalty} onChange={e=>setFm({...fm,loyalty:e.target.value})} style={css.sel}>{LOYALTY.map(l=><option key={l} value={l}>{l}</option>)}</select></div><div><label style={css.lbl}>🎂 Birthday</label><input type="date" value={fm.birthday||""} onChange={e=>setFm({...fm,birthday:e.target.value})} style={css.inp}/></div></div><div style={{...css.row,marginTop:"12px"}}><button onClick={save} style={{...css.btn(),flex:1}}>💾 Save</button><button onClick={()=>setSf(false)} style={css.btnO}>Wapas</button></div></div></div>}
+      {bc&&<div style={css.modal}><div style={css.mb("460px")}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:"10px"}}><div style={{fontWeight:"800",color:T.accent}}>📢 WhatsApp Broadcast</div><button onClick={()=>setBc(false)} style={css.btnO}>✕</button></div>
+        <label style={css.lbl}>Message</label>
+        <textarea value={bcMsg} onChange={e=>setBcMsg(e.target.value)} style={{...css.inp,height:"80px",resize:"vertical"}}/>
+        <label style={css.lbl}>Kis ko bhejna hai?</label>
+        <select value={bcAud} onChange={e=>setBcAud(e.target.value)} style={css.sel}><option value="All">Sab customers ({custs.length})</option>{LOYALTY.map(l=><option key={l} value={l}>{l} ({custs.filter(c=>c.loyalty===l).length})</option>)}<option value="Udhaar">Jin pe udhaar hai ({custs.filter(c=>c.udhaar>0).length})</option></select>
+        {(()=>{const tgt=custs.filter(c=>(c.whatsapp||c.phone)&&(bcAud==="All"?true:bcAud==="Udhaar"?c.udhaar>0:c.loyalty===bcAud));return(<>
+        <div style={{fontSize:"11px",color:T.muted,margin:"8px 0 4px"}}>{tgt.length} customers — neeche se ek-ek ko bhejo (WhatsApp khud open hoga):</div>
+        <div style={{maxHeight:"180px",overflow:"auto",border:`1px solid ${T.border}`,borderRadius:"8px",padding:"4px"}}>{tgt.map(c=><div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 6px",borderBottom:`1px solid ${T.border}33`,fontSize:"11px"}}><span>{c.name} <span style={{color:T.muted}}>{c.whatsapp||c.phone}</span></span><button onClick={()=>window.open(waLink(c,bcMsg))} style={{...css.btn(T.success),padding:"2px 8px",fontSize:"10px"}}>📱 Send</button></div>)}{tgt.length===0&&<div style={{textAlign:"center",color:T.muted,padding:"10px",fontSize:"11px"}}>Koi customer nahi</div>}</div>
+        <div style={{fontSize:"9px",color:T.muted,marginTop:"6px"}}>💡 WhatsApp web/app khulega message ke saath — aap Send dabayen. (Browser bulk auto-send allow nahi karta.)</div>
+        </>);})()}
+      </div></div>}
     </div>
   );
 }
@@ -2261,9 +2281,12 @@ function Settings({T,t,css,theme,setTheme,lang,setLang,users,setUsers,isAdmin,sh
           <div style={{fontWeight:"700",marginBottom:"8px"}}>🏪 Shop Info</div>
           {editShop?(<>
             {[["name","Naam"],["address","Pata"],["phone","Phone"],["whatsapp","WhatsApp"],["tiktok","TikTok ID"],["instagram","Instagram ID"],["website","Website"]].map(([k,l])=><div key={k}><label style={css.lbl}>{l}</label><input value={si[k]||""} onChange={e=>setSi({...si,[k]:e.target.value})} style={css.inp}/></div>)}
+            <label style={css.lbl}>💳 Payment QR (EasyPaisa / JazzCash) — receipt pe chhpega</label>
+            <input type="file" accept="image/*" onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setSi({...si,payQR:ev.target.result});r.readAsDataURL(f);}} style={{fontSize:"11px",width:"100%"}}/>
+            {si.payQR&&<div style={{marginTop:"4px",display:"flex",alignItems:"center",gap:"8px"}}><img src={si.payQR} alt="QR" style={{width:"70px",height:"70px",objectFit:"contain",border:`1px solid ${T.border}`,borderRadius:"6px",background:"#fff"}}/><button onClick={()=>setSi({...si,payQR:""})} style={{...css.btn(T.danger),fontSize:"9px",padding:"2px 6px"}}>Remove QR</button></div>}
             <div style={{...css.row,marginTop:"8px"}}><button onClick={saveShop} style={{...css.btn(),flex:1}}>💾 Save</button><button onClick={()=>{setSi({...shopInfo});setEditShop(false);}} style={css.btnO}>Cancel</button></div>
           </>):(
-            <>{Object.entries(shopInfo||{}).map(([k,v])=><div key={k} style={{fontSize:"11px",marginBottom:"4px"}}><span style={{color:T.muted}}>{k}: </span><strong>{v}</strong></div>)}
+            <>{Object.entries(shopInfo||{}).filter(([k])=>k!=="payQR").map(([k,v])=><div key={k} style={{fontSize:"11px",marginBottom:"4px"}}><span style={{color:T.muted}}>{k}: </span><strong>{v}</strong></div>)}{shopInfo?.payQR&&<div style={{fontSize:"11px",marginBottom:"4px"}}><span style={{color:T.muted}}>payment QR: </span><strong style={{color:T.success}}>✓ set</strong></div>}
             <button onClick={()=>{setSi({...shopInfo});setEditShop(true);}} style={{...css.btn(T.info),width:"100%",marginTop:"8px",fontSize:"11px"}}>✏️ Edit</button></>
           )}
         </div>
