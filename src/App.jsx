@@ -838,6 +838,11 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
 
   const checkout=()=>{
     if(!cart.length)return alert("Cart khali hai!");
+    // Bargaining floor-price guard — koi line cost price se kam pe na biche
+    const lossLines=cart.filter(it=>{const p=prods.find(x=>x.id===it.pid);return p&&Number(it.price)<Number(p.costPrice);});
+    if(lossLines.length){const names=lossLines.map(l=>l.name).join(", ");
+      if(!isAdmin){alert("⚠️ Ye items COST se kam pe bik rahe hain (nuqsan):\n"+names+"\n\nAdmin se permission lo ya price theek karo.");return;}
+      if(!confirm("⚠️ Nuqsan alert! Ye items cost price se kam pe bik rahe hain:\n"+names+"\n\nPhir bhi bill banayein?"))return;}
     if(discAmt>0&&!isAdmin){const mx=cart.reduce((a,item)=>{const p=prods.find(x=>x.id===item.pid);return a+(p?(item.price*item.qty*(p.maxDiscount||10)/100):0);},0);if(discAmt>mx){setShowDR(true);return;}}
     const payStr=splitPay?`${pay}+${pay2}`:pay;
     const s={id:gid(),date:now,time:new Date().toLocaleTimeString(),hour:new Date().getHours(),customer:cust,phone:custs.find(c=>c.name===cust)?.phone||"",salesman:sman,dealing:dealing,items:cart,subtotal:sub,discount:discAmt,total:tot,paid:totalPaid,remaining:rem,payment:payStr};
@@ -906,7 +911,7 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
               <div key={item.pid} style={{display:"flex",alignItems:"center",gap:"3px",padding:"3px 0",borderBottom:`1px solid ${T.border}`,fontSize:"10px"}}>
                 <div style={{flex:1,minWidth:0}}><div style={{fontWeight:"600"}}>{item.name} <span style={{color:T.muted,fontWeight:"400"}}>{item.unit}</span></div><select value={item.itemSman||sman} onChange={e=>setCart(cart.map(c=>c.pid===item.pid?{...c,itemSman:e.target.value}:c))} style={{...css.sel,padding:"0 3px",fontSize:"9px",marginTop:"1px",width:"100%",height:"18px"}} title="Deal by (staff bonus)">{[user.name,...emps.map(e=>e.name)].filter((v,i,a)=>a.indexOf(v)===i).map(n=><option key={n} value={n}>👤 {n}</option>)}</select></div>
                 <input type="number" value={item.qty} onChange={e=>setCart(cart.map(c=>c.pid===item.pid?{...c,qty:+e.target.value||0,total:(+e.target.value||0)*c.price}:c))} style={{...css.inp,width:"40px",padding:"2px 4px"}}/>
-                <input type="number" value={item.price} onChange={e=>setCart(cart.map(c=>c.pid===item.pid?{...c,price:+e.target.value||0,total:c.qty*(+e.target.value||0)}:c))} style={{...css.inp,width:"60px",padding:"2px 4px"}}/>
+                {(()=>{const fp=prods.find(x=>x.id===item.pid);const below=fp&&Number(item.price)<Number(fp.costPrice);return(<div style={{width:"60px"}}><input type="number" value={item.price} onChange={e=>setCart(cart.map(c=>c.pid===item.pid?{...c,price:+e.target.value||0,total:c.qty*(+e.target.value||0)}:c))} style={{...css.inp,width:"60px",padding:"2px 4px",...(below?{borderColor:T.danger,color:T.danger}:{})}} title={fp?"Cost: "+pkr(fp.costPrice):""}/>{below&&<div style={{fontSize:"8px",color:T.danger,textAlign:"center",fontWeight:"700"}}>⚠️cost {pkr(fp.costPrice)}</div>}</div>);})()}
                 <span style={{color:T.accent,fontWeight:"700",width:"56px",fontSize:"11px"}}>{pkr(item.total)}</span>
                 <button onClick={()=>setCart(cart.filter(c=>c.pid!==item.pid))} style={{...css.btn(T.danger),padding:"2px 5px",fontSize:"10px"}}>✕</button>
               </div>
@@ -1088,7 +1093,7 @@ function SupplierReturn({T,t,css,supRet,setSupRet,supps,prods,setProds,gid,pkr,t
 // ── INVENTORY ─────────────────────────────────────────────────
 function Inventory({T,t,css,prods,setProds,supps,isAdmin,gid,pkr,td,log,BarcodeSVG,gbc,ghc,publishWeb}) {
   const [sf,setSf]=useState(false);const [ep,setEp]=useState(null);const [sq,setSq]=useState("");const [cf,setCf]=useState("All");
-  const blank={name:"",category:CATS[0],brand:"",color:"",fabric:"",qtyType:"meter",barcode:gbc(),hiddenCode:ghc(1),rack:"",stock:0,costPrice:0,salePrice:0,offerPrice:"",offerStart:"",offerEnd:"",supplier:"",bonus:0,maxDiscount:10,img1:"",img2:"",img3:"",listOnWeb:false,display_stock_text:"",size_type:"free",badge_type:""};
+  const blank={name:"",category:CATS[0],brand:"",color:"",fabric:"",qtyType:"meter",barcode:gbc(),hiddenCode:ghc(1),rack:"",stock:0,costPrice:0,salePrice:0,offerPrice:"",offerStart:"",offerEnd:"",supplier:"",bonus:0,maxDiscount:10,rollSize:"",img1:"",img2:"",img3:"",listOnWeb:false,display_stock_text:"",size_type:"free",badge_type:""};
   const [fm,setFm]=useState(blank);
   const fl=prods.filter(p=>(cf==="All"||p.category===cf)&&(p.name.toLowerCase().includes(sq.toLowerCase())||p.barcode.includes(sq)));
   const save=async()=>{if(!fm.name||!fm.salePrice)return alert("Naam aur price zaroori!");let o={...fm,id:ep?ep.id:gid(),stock:+fm.stock,costPrice:+fm.costPrice,salePrice:+fm.salePrice,offerPrice:fm.offerPrice?+fm.offerPrice:null,bonus:+fm.bonus,maxDiscount:+fm.maxDiscount||10};if(fm.listOnWeb&&publishWeb){const wid=await publishWeb(o);if(wid){o={...o,webId:wid,webStatus:"pending"};alert("🌐 Website ke 'Pending' me bhej diya!\nWebsite admin → Pending me ja kar photos/edit kar ke Publish karein.");}}ep?setProds(p=>p.map(x=>x.id===ep.id?o:x)):setProds(p=>[...p,o]);log("Inventory",`${fm.name} ${ep?"updated":"added"}`);setSf(false);setEp(null);setFm({...blank,barcode:gbc(),hiddenCode:ghc(prods.length+1)});};
@@ -1109,7 +1114,7 @@ function Inventory({T,t,css,prods,setProds,supps,isAdmin,gid,pkr,td,log,BarcodeS
               <td style={css.td}>{i+1}</td>
               <td style={css.td}><strong>{p.name}</strong>{p.webId&&<span style={{...css.badge(T.info),marginLeft:"4px",fontSize:"8px"}}>🌐 Web</span>}<div style={{fontSize:"10px",color:T.muted}}>{p.brand}|{p.color}|{p.rack}</div></td>
               <td style={css.td}><span style={css.badge(T.info)}>{p.category.split(" ")[0]}</span></td>
-              <td style={css.td}><span style={css.badge(p.stock<=5?T.danger:T.success)}>{p.stock} {p.qtyType}</span></td>
+              <td style={css.td}><span style={css.badge(p.stock<=5?T.danger:T.success)}>{p.stock} {p.qtyType}</span>{+p.rollSize>0&&<div style={{fontSize:"9px",color:T.muted}}>🧵 {Math.floor(p.stock/p.rollSize)} thaan + {(p.stock%p.rollSize).toFixed(1)}m</div>}</td>
               <td style={css.td}>{pkr(p.costPrice)}</td>
               <td style={css.td}><strong style={{color:T.accent}}>{pkr(p.salePrice)}</strong></td>
               <td style={css.td}><div style={{background:"#fff",borderRadius:"3px",padding:"2px",display:"inline-block"}}><BarcodeSVG value={p.barcode} width={80} height={22} showText={false}/></div><div style={{fontSize:"9px",color:T.muted}}>{p.barcode}</div></td>
@@ -1120,6 +1125,11 @@ function Inventory({T,t,css,prods,setProds,supps,isAdmin,gid,pkr,td,log,BarcodeS
         </table>
       </div>
       {sf&&<div style={css.modal}><div style={css.mb("580px")}><div style={{fontWeight:"800",color:T.accent,marginBottom:"12px"}}>{ep?"✏️":"➕"} Product</div><div style={css.g2}>{[["name","Naam","text"],["brand","Brand","text"],["color","Rang","text"],["fabric","Fabric","text"],["rack","Rack","text"],["stock","Stock","number"],["costPrice","Cost Price","number"],["salePrice","Sale Price","number"],["maxDiscount","Max Disc %","number"],["offerPrice","Offer Price","number"],["offerStart","Offer Start","date"],["offerEnd","Offer End","date"],["bonus","Bonus Rs (Salesman)","number"],["barcode","Barcode","text"],["supplier","Supplier","text"]].map(([k,l,tp])=><div key={k}><label style={css.lbl}>{l}</label><input type={tp} value={fm[k]||""} onChange={e=>setFm({...fm,[k]:e.target.value})} style={css.inp}/></div>)}<div><label style={css.lbl}>Category</label><select value={fm.category} onChange={e=>setFm({...fm,category:e.target.value})} style={css.sel}>{CATS.map(c=><option key={c} value={c}>{c}</option>)}</select></div><div><label style={css.lbl}>Qty Type</label><select value={fm.qtyType} onChange={e=>setFm({...fm,qtyType:e.target.value})} style={css.sel}><option value="meter">Meter</option><option value="gaz">Gaz</option><option value="piece">Piece</option></select></div></div>
+        <div style={{background:T.surface,borderRadius:"8px",padding:"8px",marginTop:"8px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:"6px",alignItems:"center"}}><div style={{fontSize:"11px",fontWeight:"700",color:T.accent}}>🧮 Margin Calculator</div>{+fm.costPrice>0&&+fm.salePrice>0&&<div style={{fontSize:"11px"}}>Margin: <b style={{color:T.success}}>{Math.round((fm.salePrice/fm.costPrice-1)*100)}%</b> · Munafa/unit: <b style={{color:T.accent}}>{pkr(fm.salePrice-fm.costPrice)}</b></div>}</div>
+          <div style={{display:"flex",gap:"5px",marginTop:"6px",flexWrap:"wrap",alignItems:"center"}}>{[20,30,40,50,60].map(m=><button key={m} type="button" onClick={()=>setFm({...fm,salePrice:Math.round((+fm.costPrice||0)*(1+m/100))})} style={{...css.btn(T.info),fontSize:"10px",padding:"3px 8px"}}>+{m}%</button>)}<span style={{fontSize:"9px",color:T.muted}}>cost pe margin laga kar sale price set karo</span></div>
+          {fm.qtyType==="meter"&&<div style={{marginTop:"8px"}}><label style={css.lbl}>🧵 Thaan Size (meter per roll) — optional</label><input type="number" value={fm.rollSize||""} onChange={e=>setFm({...fm,rollSize:e.target.value})} style={{...css.inp,maxWidth:"160px"}} placeholder="e.g. 24"/>{+fm.rollSize>0&&+fm.stock>0&&<span style={{fontSize:"10px",color:T.muted,marginLeft:"8px"}}>Stock = {Math.floor(fm.stock/fm.rollSize)} thaan + {(fm.stock%fm.rollSize).toFixed(1)} m</span>}</div>}
+        </div>
         <div style={{background:T.surface,borderRadius:"6px",padding:"8px",marginTop:"8px"}}>
           <div style={{fontSize:"10px",color:T.muted,marginBottom:"4px"}}>🔲 Product QR Code (scan se product dhundho)</div>
           <div style={{background:"#fff",borderRadius:"4px",padding:"4px",display:"inline-block"}}>
