@@ -1719,7 +1719,7 @@ function Employees({T,t,css,emps,setEmps,att,setAtt,sales,prods,user,isAdmin,gid
   const mark=(id,st)=>{const ex=att.find(a=>a.empId===id&&a.date===td());ex?setAtt(a=>a.map(x=>x.empId===id&&x.date===td()?{...x,status:st}:x)):setAtt(a=>[...a,{id:gid(),empId:id,date:td(),status:st,checkIn:new Date().toTimeString().slice(0,5)}]);log("Attendance",`${emps.find(e=>e.id===id)?.name} — ${st}`);};
   const save=()=>{if(!fm.name)return;ee?setEmps(e=>e.map(x=>x.id===ee.id?{...x,...fm,salary:+fm.salary,advance:+fm.advance}:x)):setEmps(e=>[...e,{...fm,id:gid(),salary:+fm.salary,advance:+fm.advance}]);setSf(false);setEe(null);setFm(blank);};
   const es=(n,p)=>sales.filter(s=>s.salesman===n&&(p==="t"?s.date===td():p==="m"?s.date.startsWith(mon()):s.date.startsWith(td().slice(0,4)))).reduce((a,s)=>a+s.total,0);
-  const eb=(n)=>sales.reduce((a,s)=>s.salesman===n?a+s.items.reduce((b,i)=>{const p=prods.find(pr=>pr.id===i.productId);return b+(p?p.bonus*i.qty:0);},0):a,0);
+  const eb=(n)=>sales.reduce((a,s)=>a+s.items.reduce((b,i)=>{const p=prods.find(pr=>pr.id===(i.pid??i.productId));return b+((p&&((i.itemSman||s.salesman)===n))?p.bonus*i.qty:0);},0),0);
   const ta=(id)=>att.find(a=>a.empId===id&&a.date===td());
   return(
     <div>
@@ -1731,9 +1731,8 @@ function Employees({T,t,css,emps,setEmps,att,setAtt,sales,prods,user,isAdmin,gid
         <div style={{overflowX:"auto",marginBottom:"16px"}}><table style={css.tbl}><thead><tr>{["Naam","Aaj","Maheena","Saal","Total Bonus","Bills"].map(h=><th key={h} style={css.th}>{h}</th>)}</tr></thead><tbody>{emps.map(e=><tr key={e.id}><td style={css.td}><strong>{e.name}</strong></td><td style={css.td}><span style={{color:T.success}}>{pkr(es(e.name,"t"))}</span></td><td style={css.td}><span style={{color:T.info}}>{pkr(es(e.name,"m"))}</span></td><td style={css.td}><span style={{color:T.accent}}>{pkr(es(e.name,"y"))}</span></td><td style={css.td}><span style={{color:"#e0a052",fontWeight:"700"}}>{pkr(eb(e.name))}</span></td><td style={css.td}>{sales.filter(s=>s.salesman===e.name).length}</td></tr>)}</tbody></table></div>
         <div style={css.h2}>💰 Per-Product Bonus Breakdown <span style={{fontSize:"10px",color:T.muted}}>(Sirf Admin — Thermal pe nahi)</span></div>
         {emps.map(e=>{
-          const empSales=sales.filter(s=>s.salesman===e.name);
           const prodBonuses={};
-          empSales.forEach(s=>s.items.forEach(i=>{const p=prods.find(pr=>pr.id===i.productId);if(p&&p.bonus>0){if(!prodBonuses[p.id])prodBonuses[p.id]={name:p.name,bonus:p.bonus,qty:0,total:0};prodBonuses[p.id].qty+=i.qty;prodBonuses[p.id].total+=p.bonus*i.qty;}}));
+          sales.forEach(s=>s.items.forEach(i=>{if((i.itemSman||s.salesman)!==e.name)return;const p=prods.find(pr=>pr.id===(i.pid??i.productId));if(p&&p.bonus>0){if(!prodBonuses[p.id])prodBonuses[p.id]={name:p.name,bonus:p.bonus,qty:0,total:0};prodBonuses[p.id].qty+=i.qty;prodBonuses[p.id].total+=p.bonus*i.qty;}}));
           const bonusList=Object.values(prodBonuses).filter(b=>b.total>0);
           if(!bonusList.length)return null;
           return(
@@ -1753,7 +1752,7 @@ function Employees({T,t,css,emps,setEmps,att,setAtt,sales,prods,user,isAdmin,gid
 function Salary({T,t,css,emps,setEmps,sal,setSal,att,sales,prods,gid,pkr,td,log}) {
   const [sf,setSf]=useState(false);const [fm,setFm]=useState({empId:null,empName:"",salary:0,advance:0,bonus:0,deduction:0,notes:"",month:mon()});
   const pd=(id,m)=>att.filter(a=>a.empId===id&&a.date.startsWith(m)&&a.status!=="Absent").length;
-  const eb=(name,m)=>sales.filter(s=>s.salesman===name&&s.date.startsWith(m)).reduce((a,s)=>a+s.items.reduce((b,i)=>{const p=prods.find(pr=>pr.id===i.productId);return b+(p?p.bonus*i.qty:0);},0),0);
+  const eb=(name,m)=>sales.filter(s=>s.date.startsWith(m)).reduce((a,s)=>a+s.items.reduce((b,i)=>{const p=prods.find(pr=>pr.id===(i.pid??i.productId));return b+((p&&((i.itemSman||s.salesman)===name))?p.bonus*i.qty:0);},0),0);
   const pay=()=>{if(!fm.empId)return;const net=+fm.salary + +fm.bonus - +fm.advance - +fm.deduction;setSal(p=>[...p,{...fm,id:gid(),date:td(),net,empId:+fm.empId}]);setEmps(e=>e.map(x=>x.id===+fm.empId?{...x,advance:0}:x));log("Salary",`${fm.empName} — Rs.${net}`);setSf(false);};
   return(
     <div>
@@ -1984,7 +1983,7 @@ function Reports({T,t,css,sales,exps,prods,emps,custs,supps,sal,dmg,cc,att,pkr,t
   const mt=ms.reduce((a,s)=>a+s.total,0);
   const me=exps.filter(e=>e.date.startsWith(selMonth)).reduce((a,e)=>a+e.amount,0);
   const es=(n,p)=>sales.filter(s=>s.salesman===n&&(p==="t"?s.date===td():s.date.startsWith(selMonth))).reduce((a,s)=>a+s.total,0);
-  const eb=(n)=>sales.filter(s=>s.salesman===n).reduce((a,s)=>a+s.items.reduce((b,i)=>{const p=prods.find(pr=>pr.id===i.productId);return b+(p?p.bonus*i.qty:0);},0),0);
+  const eb=(n)=>sales.reduce((a,s)=>a+s.items.reduce((b,i)=>{const p=prods.find(pr=>pr.id===(i.pid??i.productId));return b+((p&&((i.itemSman||s.salesman)===n))?p.bonus*i.qty:0);},0),0);
 
   // Monthly comparison — last 6 months
   const last6=Array.from({length:6},(_,i)=>{
@@ -1997,9 +1996,9 @@ function Reports({T,t,css,sales,exps,prods,emps,custs,supps,sal,dmg,cc,att,pkr,t
 
   // Profit per product
   const prodProfit=prods.map(p=>{
-    const revenue=sales.reduce((a,s)=>a+s.items.filter(i=>i.productId===p.id).reduce((b,i)=>b+i.total,0),0);
-    const cost=sales.reduce((a,s)=>a+s.items.filter(i=>i.productId===p.id).reduce((b,i)=>b+(i.qty*(p.costPrice||0)),0),0);
-    const qty=sales.reduce((a,s)=>a+s.items.filter(i=>i.productId===p.id).reduce((b,i)=>b+i.qty,0),0);
+    const revenue=sales.reduce((a,s)=>a+s.items.filter(i=>(i.pid??i.productId)===p.id).reduce((b,i)=>b+i.total,0),0);
+    const cost=sales.reduce((a,s)=>a+s.items.filter(i=>(i.pid??i.productId)===p.id).reduce((b,i)=>b+(i.qty*(p.costPrice||0)),0),0);
+    const qty=sales.reduce((a,s)=>a+s.items.filter(i=>(i.pid??i.productId)===p.id).reduce((b,i)=>b+i.qty,0),0);
     return{...p,revenue,cost,profit:revenue-cost,qty};
   }).filter(p=>p.revenue>0).sort((a,b)=>b.profit-a.profit);
 
@@ -2107,7 +2106,7 @@ function Reports({T,t,css,sales,exps,prods,emps,custs,supps,sal,dmg,cc,att,pkr,t
       </div>}
 
       {tab==="category"&&<div>
-        <div style={{display:"grid",gap:"8px"}}>{CATS.map((cat,i)=>{const cp=prods.filter(p=>p.category===cat);const ct=sales.reduce((a,s)=>a+s.items.filter(it=>{const p=prods.find(pr=>pr.id===it.productId);return p&&p.category===cat;}).reduce((b,it)=>b+it.total,0),0);return<div key={cat} style={css.card}><div style={{fontWeight:"700",color:CAT_C[i%5],marginBottom:"5px"}}>{cat}</div><div style={{display:"flex",gap:"12px",fontSize:"11px",flexWrap:"wrap"}}><div>Items:<strong>{cp.length}</strong></div><div>Stock:<strong>{cp.reduce((a,p)=>a+p.stock,0).toFixed(1)}</strong></div><div>Sale:<strong style={{color:T.success}}>{pkr(ct)}</strong></div><div>Val:<strong style={{color:T.info}}>{pkr(cp.reduce((a,p)=>a+p.stock*p.costPrice,0))}</strong></div></div></div>;})}
+        <div style={{display:"grid",gap:"8px"}}>{CATS.map((cat,i)=>{const cp=prods.filter(p=>p.category===cat);const ct=sales.reduce((a,s)=>a+s.items.filter(it=>{const p=prods.find(pr=>pr.id===(it.pid??it.productId));return p&&p.category===cat;}).reduce((b,it)=>b+it.total,0),0);return<div key={cat} style={css.card}><div style={{fontWeight:"700",color:CAT_C[i%5],marginBottom:"5px"}}>{cat}</div><div style={{display:"flex",gap:"12px",fontSize:"11px",flexWrap:"wrap"}}><div>Items:<strong>{cp.length}</strong></div><div>Stock:<strong>{cp.reduce((a,p)=>a+p.stock,0).toFixed(1)}</strong></div><div>Sale:<strong style={{color:T.success}}>{pkr(ct)}</strong></div><div>Val:<strong style={{color:T.info}}>{pkr(cp.reduce((a,p)=>a+p.stock*p.costPrice,0))}</strong></div></div></div>;})}
         </div>
       </div>}
 
