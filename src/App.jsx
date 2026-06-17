@@ -59,7 +59,9 @@ const THEMES = {
   "Royal Blue": {bg:"#050d1a",surface:"#0a1628",card:"#0f1f3a",border:"#1a3050",accent:"#4a90e2",text:"#e8f0f8",muted:"#7a9bbf",danger:"#e05252",success:"#4caf7d",info:"#c49af0",btnText:"#ffffff"},
   "Dark Green": {bg:"#050f08",surface:"#0a1a0d",card:"#0f2214",border:"#1a3820",accent:"#4caf7d",text:"#e8f5ed",muted:"#7aaa8a",danger:"#e05252",success:"#7dd4a0",info:"#4a90e2",btnText:"#06210f"},
   "Red Black":  {bg:"#0a0505",surface:"#140a0a",card:"#1a0f0f",border:"#2a1515",accent:"#e05252",text:"#f8e8e8",muted:"#aa7a7a",danger:"#e05252",success:"#4caf7d",info:"#4a90e2",btnText:"#ffffff"},
-  "White Gold": {bg:"#fafaf7",surface:"#f5f2e8",card:"#ffffff",border:"#e8dfc0",accent:"#c9a84c",text:"#2c2416",muted:"#8a7a5a",danger:"#c0392b",success:"#4a7c59",info:"#2980b9",btnText:"#ffffff"}
+  "White Gold": {bg:"#fafaf7",surface:"#f5f2e8",card:"#ffffff",border:"#e8dfc0",accent:"#c9a84c",text:"#2c2416",muted:"#8a7a5a",danger:"#c0392b",success:"#4a7c59",info:"#2980b9",btnText:"#ffffff"},
+  "Eid Green":  {bg:"#f3faf5",surface:"#e9f5ed",card:"#ffffff",border:"#cfe8d8",accent:"#0f9d58",text:"#143420",muted:"#5e8a70",danger:"#dc2626",success:"#16a34a",info:"#d4a017",btnText:"#ffffff"},
+  "Ramadan Night": {bg:"#0b1020",surface:"#121833",card:"#18203f",border:"#26305a",accent:"#d4af37",text:"#eef0f8",muted:"#8a93b8",danger:"#e05252",success:"#4caf7d",info:"#7c9cf0",btnText:"#1a1408"}
 };
 
 const T_RO = {
@@ -635,6 +637,7 @@ export default function App() {
         <span style={{fontSize:"10px",color:syncing?"#e0a052":syncStatus.includes("✅")?"#4caf7d":"#e05252",background:T.surface,padding:"2px 8px",borderRadius:"10px",border:`1px solid ${T.border}`}}>{syncStatus}{lastSync&&` — ${lastSync}`}</span>
         <span style={css.badge(isAdmin?T.accent:isManager?T.info:T.success)}>{user.role}</span>
         <span style={{fontSize:"11px",color:T.muted,maxWidth:"80px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.name}</span>
+        <button onClick={()=>setTheme(["Modern Blue","White Gold","Eid Green"].includes(theme)?"Black Gold":"Modern Blue")} title="Light / Dark" style={{...css.btn(T.surface),color:T.text,border:`1px solid ${T.border}`,padding:"4px 7px",fontSize:"12px"}}>{["Modern Blue","White Gold","Eid Green"].includes(theme)?"🌙":"☀️"}</button>
         <select value={lang} onChange={e=>setLang(e.target.value)} style={{...css.sel,width:"auto",padding:"3px 6px",fontSize:"10px"}}>
           <option value="ro">RU</option><option value="en">EN</option><option value="ur">UR</option>
         </select>
@@ -733,6 +736,9 @@ function Login({users,onLogin,T,t,css}) {
 function Dashboard({T,t,css,todayTotal,todayOnline,todayExp,todayProfit,pendingUdh,lowStock,todaySales,prods,sales,emps,exps,pendingDR,pkr,mon}) {
   const last7=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-(6-i));const ds=d.toISOString().split("T")[0];return{day:d.toLocaleDateString("en",{weekday:"short"}),sale:sales.filter(s=>s.date===ds).reduce((a,s)=>a+s.total,0),exp:exps.filter(e=>e.date===ds).reduce((a,e)=>a+e.amount,0)};});
   const catData=CATS.map((c,i)=>({name:c.split(" ").slice(0,2).join(" "),value:sales.reduce((a,s)=>a+s.items.filter(it=>{const p=prods.find(pr=>pr.id===(it.pid??it.productId));return p&&p.category===c;}).reduce((b,it)=>b+it.total,0),0),color:CAT_C[i]}));
+  const [target,setTarget]=useState(()=>LS.get("sales_target",0));
+  useEffect(()=>{LS.set("sales_target",target);},[target]);
+  const pct=target>0?Math.min(100,Math.round(todayTotal/target*100)):0;
   return(
     <div>
       <div style={css.h1}>📊 {t.dashboard} <span style={{fontSize:"11px",color:T.muted,fontWeight:"400"}}>— {td()}</span></div>
@@ -740,6 +746,14 @@ function Dashboard({T,t,css,todayTotal,todayOnline,todayExp,todayProfit,pendingU
         {[{l:t.todaySale+" (Shop)",v:pkr(todayTotal),i:"💰",c:T.success},...(todayOnline>0?[{l:"Website Sale",v:pkr(todayOnline),i:"🌐",c:T.info}]:[]),{l:t.totalExpense,v:pkr(todayExp),i:"🧾",c:T.danger},{l:t.netProfit,v:pkr(todayProfit),i:"📈",c:T.accent},{l:t.pendingUdhaar,v:pkr(pendingUdh),i:"⚠️",c:"#e0a052"},{l:"Bills",v:todaySales.length,i:"🧾",c:T.info},{l:"Disc Req",v:pendingDR.length,i:"🎯",c:"#a052e0"}].map((s,i)=>(
           <div key={i} style={css.sc(s.c)}><div style={{fontSize:"18px"}}>{s.i}</div><div style={{fontSize:"17px",fontWeight:"900",color:s.c}}>{s.v}</div><div style={{fontSize:"10px",color:T.muted}}>{s.l}</div></div>
         ))}
+      </div>
+      <div style={{...css.card,marginBottom:"12px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px",flexWrap:"wrap",gap:"6px"}}>
+          <div style={{fontWeight:"700",fontSize:"12px"}}>🎯 Aaj ka Sales Target</div>
+          <div style={{display:"flex",alignItems:"center",gap:"6px"}}><input type="number" value={target||""} onChange={e=>setTarget(+e.target.value||0)} placeholder="Target Rs" style={{...css.inp,width:"120px",padding:"3px 6px",fontSize:"11px"}}/><span style={{fontSize:"13px",fontWeight:"800",color:pct>=100?T.success:T.accent}}>{pct}%</span></div>
+        </div>
+        <div style={{height:"16px",background:T.surface,borderRadius:"8px",overflow:"hidden",border:`1px solid ${T.border}`}}><div style={{height:"100%",width:`${pct}%`,background:pct>=100?T.success:T.accent,transition:"width .6s ease",borderRadius:"8px"}}/></div>
+        <div style={{fontSize:"10px",color:T.muted,marginTop:"4px"}}>{pkr(todayTotal)} / {pkr(target)} {target>0?(todayTotal>=target?"— 🎉 Mubarak, target pura!":`— ${pkr(Math.max(0,target-todayTotal))} aur chahiye`):"— upar target set karo (motivation ke liye)"}</div>
       </div>
       {lowStock.length>0&&<div style={{...css.card,borderLeft:`4px solid ${T.danger}`,marginBottom:"12px"}}><div style={{color:T.danger,fontWeight:"700",fontSize:"12px",marginBottom:"4px"}}>🚨 Low Stock ({lowStock.length})</div><div style={css.row}>{lowStock.map(p=><span key={p.id} style={css.badge(T.danger)}>{p.name} ({p.stock})</span>)}</div></div>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(270px,1fr))",gap:"12px"}}>
@@ -806,6 +820,8 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
   const [bill,setBill]=useState(null);
   const [tpl,setTpl]=useState("premium");
   const searchRef=useRef(null);
+  // "Cha-ching" sale sound — two quick rising beeps via Web Audio
+  const playChaching=()=>{try{const ctx=new(window.AudioContext||window.webkitAudioContext)();[880,1320].forEach((f,k)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.type="triangle";o.frequency.value=f;o.connect(g);g.connect(ctx.destination);const tm=ctx.currentTime+k*0.12;g.gain.setValueAtTime(0.0001,tm);g.gain.exponentialRampToValueAtTime(0.25,tm+0.02);g.gain.exponentialRampToValueAtTime(0.0001,tm+0.26);o.start(tm);o.stop(tm+0.28);});}catch(e){}};
   const [showDR,setShowDR]=useState(false);
   const [drNote,setDrNote]=useState("");
   const [custMsg,setCustMsg]=useState("Shukriya! Dobara tashreef layen 🙏");
@@ -856,7 +872,7 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
     cart.forEach(item=>{const p=prods.find(x=>x.id===item.pid);if(p&&p.webId&&webStock)webStock(p.webId,Math.max(0,+(p.stock-item.qty).toFixed(2)));});
     if(rem>0){const co=custs.find(c=>c.name===cust);setUdh(prev=>[...prev,{id:gid(),customerName:cust,phone:co?.phone||"",totalAmount:rem,paid:0,remaining:rem,date:now,dueDate:"",notes:`Bill#${s.id}`}]);}
     log("Sale",`Bill#${s.id} — ${cust} — ${pkr(tot)}`);
-    setBill(s);setCart([]);setDisc(0);setDiscPct(0);setPaid(0);setPaid2(0);setSplitPay(false);setDealing("");
+    setBill(s);playChaching();setCart([]);setDisc(0);setDiscPct(0);setPaid(0);setPaid2(0);setSplitPay(false);setDealing("");
   };
 
   // Repeat last bill — load the most recent sale's items back into the cart
@@ -1005,6 +1021,7 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
       {showDR&&<div style={css.modal}><div style={css.mb("380px")}><div style={{fontWeight:"800",color:"#a052e0",marginBottom:"12px"}}>🎯 Discount Approval Request</div><div style={{background:T.surface,borderRadius:"8px",padding:"10px",fontSize:"12px",marginBottom:"10px"}}>Cart: <strong>{pkr(sub)}</strong> | Discount: <strong style={{color:T.danger}}>{pkr(discAmt)}</strong></div><label style={css.lbl}>Wajah (Admin ko batao)</label><textarea value={drNote} onChange={e=>setDrNote(e.target.value)} style={{...css.inp,height:"70px",resize:"vertical"}} placeholder="Customer ne kya kaha..."/><div style={{...css.row,marginTop:"12px"}}><button onClick={reqDisc} style={{...css.btn("#a052e0"),flex:1}}>📨 Request Bhejo</button><button onClick={()=>setShowDR(false)} style={css.btnO}>Wapas</button></div></div></div>}
 
       {bill&&<div style={css.modal}><div style={css.mb("380px")}>
+        <div style={{background:T.success+"22",border:`1px solid ${T.success}`,borderRadius:"10px",padding:"8px",textAlign:"center",marginBottom:"10px"}}><div style={{fontSize:"24px"}}>🎉✅</div><div style={{fontWeight:"800",color:T.success,fontSize:"13px"}}>Bill ban gaya — Shukriya!</div></div>
         <div style={{textAlign:"center",marginBottom:"10px"}}><div style={{fontWeight:"900",fontSize:"15px",color:T.accent}}>🧵 {shopInfo?.name||"JAMEEL FABRICS"}</div><div style={{fontSize:"10px",color:T.muted}}>{shopInfo?.address} | {shopInfo?.phone}</div></div>
         <div style={{fontSize:"11px",borderTop:`1px dashed ${T.border}`,padding:"8px 0"}}>{[["Date",bill.date],["Bill#","#"+String(bill.id).slice(-6)],["Customer",bill.customer],["By",bill.salesman],["Dealing",bill.dealing||"—"],["Payment",bill.payment]].map(([k,v])=><div key={k} style={{display:"flex",justifyContent:"space-between"}}><span style={{color:T.muted}}>{k}:</span><b>{v}</b></div>)}</div>
         <div style={{borderTop:`1px dashed ${T.border}`,padding:"8px 0"}}>{bill.items.map((it,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:"11px",marginBottom:"2px"}}><span>{it.name}{it.onOffer?" 🏷️":""} ({it.qty}{it.unit})</span><span style={{color:T.accent}}>{Number(it.total).toLocaleString()}</span></div>)}</div>
