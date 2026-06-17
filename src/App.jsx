@@ -375,7 +375,7 @@ export default function App() {
   const todaySales = sales.filter(s=>s.date===td());
   const todayTotal = todaySales.reduce((a,s)=>a+s.total,0);
   const todayExp   = exps.filter(e=>e.date===td()).reduce((a,e)=>a+Number(e.amount),0);
-  const todayProfit = todaySales.reduce((a,s)=>a+s.items.reduce((b,i)=>{const p=prods.find(pr=>pr.id===i.productId);return b+(p?(i.price-p.costPrice)*i.qty:0);},0),0)-todayExp;
+  const todayProfit = todaySales.reduce((a,s)=>a+s.items.reduce((b,i)=>{const p=prods.find(pr=>pr.id===(i.pid??i.productId));return b+(p?(i.price-p.costPrice)*i.qty:0);},0),0)-todayExp;
   const pendingUdh = udh.reduce((a,u)=>a+u.remaining,0);
   const lowStock   = prods.filter(p=>p.stock<=5);
   const pendingDR  = dr.filter(d=>d.status==="Pending");
@@ -708,7 +708,7 @@ function Login({users,onLogin,T,t,css}) {
 // ── DASHBOARD ─────────────────────────────────────────────────
 function Dashboard({T,t,css,todayTotal,todayExp,todayProfit,pendingUdh,lowStock,todaySales,prods,sales,emps,exps,pendingDR,pkr,mon}) {
   const last7=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-(6-i));const ds=d.toISOString().split("T")[0];return{day:d.toLocaleDateString("en",{weekday:"short"}),sale:sales.filter(s=>s.date===ds).reduce((a,s)=>a+s.total,0),exp:exps.filter(e=>e.date===ds).reduce((a,e)=>a+e.amount,0)};});
-  const catData=CATS.map((c,i)=>({name:c.split(" ").slice(0,2).join(" "),value:sales.reduce((a,s)=>a+s.items.filter(it=>{const p=prods.find(pr=>pr.id===it.productId);return p&&p.category===c;}).reduce((b,it)=>b+it.total,0),0),color:CAT_C[i]}));
+  const catData=CATS.map((c,i)=>({name:c.split(" ").slice(0,2).join(" "),value:sales.reduce((a,s)=>a+s.items.filter(it=>{const p=prods.find(pr=>pr.id===(it.pid??it.productId));return p&&p.category===c;}).reduce((b,it)=>b+it.total,0),0),color:CAT_C[i]}));
   return(
     <div>
       <div style={css.h1}>📊 {t.dashboard} <span style={{fontSize:"11px",color:T.muted,fontWeight:"400"}}>— {td()}</span></div>
@@ -819,7 +819,7 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
     if(!cart.length)return alert("Cart khali hai!");
     if(discAmt>0&&!isAdmin){const mx=cart.reduce((a,item)=>{const p=prods.find(x=>x.id===item.pid);return a+(p?(item.price*item.qty*(p.maxDiscount||10)/100):0);},0);if(discAmt>mx){setShowDR(true);return;}}
     const payStr=splitPay?`${pay}+${pay2}`:pay;
-    const s={id:gid(),date:now,customer:cust,phone:custs.find(c=>c.name===cust)?.phone||"",salesman:sman,dealing:dealing,items:cart,subtotal:sub,discount:discAmt,total:tot,paid:totalPaid,remaining:rem,payment:payStr};
+    const s={id:gid(),date:now,time:new Date().toLocaleTimeString(),hour:new Date().getHours(),customer:cust,phone:custs.find(c=>c.name===cust)?.phone||"",salesman:sman,dealing:dealing,items:cart,subtotal:sub,discount:discAmt,total:tot,paid:totalPaid,remaining:rem,payment:payStr};
     setSales(prev=>[...prev,s]);
     cart.forEach(item=>setProds(prev=>prev.map(p=>p.id===item.pid?{...p,stock:Math.max(0,+(p.stock-item.qty).toFixed(2))}:p)));
     if(rem>0){const co=custs.find(c=>c.name===cust);setUdh(prev=>[...prev,{id:gid(),customerName:cust,phone:co?.phone||"",totalAmount:rem,paid:0,remaining:rem,date:now,dueDate:"",notes:`Bill#${s.id}`}]);}
@@ -1790,9 +1790,22 @@ function CashClose({T,t,css,cc,setCc,sales,exps,gid,pkr,td,log}) {
 function Analytics({T,t,css,sales,exps,prods,emps,custs,att,pkr,mon,td}) {
   const last7=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-(6-i));const ds=d.toISOString().split("T")[0];return{day:d.toLocaleDateString("en",{weekday:"short"}),sale:sales.filter(s=>s.date===ds).reduce((a,s)=>a+s.total,0),exp:exps.filter(e=>e.date===ds).reduce((a,e)=>a+e.amount,0)};});
   const last6=Array.from({length:6},(_,i)=>{const d=new Date();d.setMonth(d.getMonth()-i);const m=d.toISOString().slice(0,7);return{month:m.slice(5)+"/"+m.slice(2,4),sale:sales.filter(s=>s.date.startsWith(m)).reduce((a,s)=>a+s.total,0),exp:exps.filter(e=>e.date.startsWith(m)).reduce((a,e)=>a+e.amount,0)};}).reverse();
-  const catData=CATS.map((c,i)=>({name:c.split(" ").slice(0,2).join(" "),value:sales.reduce((a,s)=>a+s.items.filter(it=>{const p=prods.find(pr=>pr.id===it.productId);return p&&p.category===c;}).reduce((b,it)=>b+it.total,0),0),color:CAT_C[i]}));
+  const iid=it=>it.pid??it.productId;
+  const catData=CATS.map((c,i)=>({name:c.split(" ").slice(0,2).join(" "),value:sales.reduce((a,s)=>a+s.items.filter(it=>{const p=prods.find(pr=>pr.id===iid(it));return p&&p.category===c;}).reduce((b,it)=>b+it.total,0),0),color:CAT_C[i]}));
   const payData=PAY_TYPES.map(pt=>({name:pt,value:sales.filter(s=>s.payment===pt).reduce((a,s)=>a+s.total,0)})).filter(p=>p.value>0);
   const totSale=sales.reduce((a,s)=>a+s.total,0);const totExp=exps.reduce((a,e)=>a+e.amount,0);
+  // ── Phase 5: per-product profit, slow movers, sales-by-hour, daily summary ──
+  const prodStats=prods.map(p=>{let u=0,r=0;sales.forEach(s=>(s.items||[]).forEach(it=>{if(iid(it)===p.id){u+=Number(it.qty)||0;r+=Number(it.total)||0;}}));const cost=u*(p.costPrice||0);return{id:p.id,name:p.name,units:+u.toFixed(2),rev:r,cost,profit:r-cost,stock:p.stock,stockVal:(p.stock||0)*(p.costPrice||0)};});
+  const topProfit=[...prodStats].filter(p=>p.units>0).sort((a,b)=>b.profit-a.profit).slice(0,8);
+  const slowMovers=[...prodStats].filter(p=>p.stock>0).sort((a,b)=>a.units-b.units).slice(0,8);
+  const byHour=Array.from({length:13},(_,k)=>{const h=k+9;return{hr:((h>12?h-12:h))+(h>=12?"p":"a"),sale:sales.filter(s=>s.hour===h).reduce((a,s)=>a+s.total,0),bills:sales.filter(s=>s.hour===h).length};});
+  const tsT=sales.filter(s=>s.date===td());const tToday=tsT.reduce((a,s)=>a+s.total,0);const tExpT=exps.filter(e=>e.date===td()).reduce((a,e)=>a+e.amount,0);
+  const tProfit=tsT.reduce((a,s)=>a+(s.items||[]).reduce((b,it)=>{const p=prods.find(pr=>pr.id===iid(it));return b+(p?((it.price-p.costPrice)*(Number(it.qty)||0)):0);},0),0)-tExpT;
+  const tUdh=tsT.reduce((a,s)=>a+(s.remaining||0),0);
+  const topToday=[...prodStats].filter(p=>p.units>0).sort((a,b)=>b.rev-a.rev).slice(0,3).map(p=>p.name).join(", ")||"—";
+  const dailyMsg=`📊 *Jameel Fabrics — Daily Summary*\n📅 ${td()}\n\n🧾 Bills: ${tsT.length}\n💰 Sale: ${pkr(tToday)}\n🧮 Kharcha: ${pkr(tExpT)}\n📈 Munafa: ${pkr(tProfit)}\n💳 Aaj ka Udhaar: ${pkr(tUdh)}\n\n🏆 Top: ${topToday}`;
+  const sendDailyWA=()=>window.open("https://wa.me/?text="+encodeURIComponent(dailyMsg),"_blank");
+  const sendDailyEmail=()=>window.open("mailto:?subject="+encodeURIComponent("Jameel Fabrics — Daily Summary "+td())+"&body="+encodeURIComponent(dailyMsg.replace(/\*/g,"")),"_blank");
   return(
     <div>
       <div style={css.h1}>📈 {t.analytics}</div>
@@ -1807,7 +1820,21 @@ function Analytics({T,t,css,sales,exps,prods,emps,custs,att,pkr,mon,td}) {
         <div style={css.card}><div style={css.h2}>🏷️ Category</div><ResponsiveContainer width="100%" height={160}><PieChart><Pie data={catData.filter(c=>c.value>0)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={55} label={({name,percent})=>`${name.split(" ")[0]} ${(percent*100).toFixed(0)}%`} labelLine={false} fontSize={8}>{catData.map((c,i)=><Cell key={i} fill={c.color}/>)}</Pie><Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,color:T.text,fontSize:10}} formatter={(v)=>pkr(v)}/></PieChart></ResponsiveContainer></div>
         <div style={css.card}><div style={css.h2}>💳 Payment Methods</div><ResponsiveContainer width="100%" height={160}><PieChart><Pie data={payData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={55} label={({name,percent})=>`${name.split(" ")[0]} ${(percent*100).toFixed(0)}%`} labelLine={false} fontSize={8}>{payData.map((_,i)=><Cell key={i} fill={[T.success,T.info,T.accent,"#e0a052"][i%4]}/>)}</Pie><Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,color:T.text,fontSize:10}} formatter={(v)=>pkr(v)}/></PieChart></ResponsiveContainer></div>
         <div style={css.card}><div style={css.h2}>👤 Salesman Compare</div><ResponsiveContainer width="100%" height={160}><BarChart data={emps.map(e=>({name:e.name.split(" ")[0],sale:sales.filter(s=>s.salesman===e.name).reduce((a,s)=>a+s.total,0)}))} margin={{top:5,right:5,left:-20,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={T.border}/><XAxis dataKey="name" tick={{fill:T.muted,fontSize:9}}/><YAxis tick={{fill:T.muted,fontSize:9}}/><Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,color:T.text,fontSize:10}} formatter={(v)=>pkr(v)}/><Bar dataKey="sale" fill={T.accent} radius={[3,3,0,0]}/></BarChart></ResponsiveContainer></div>
-        <div style={css.card}><div style={css.h2}>🏆 Top 5 Products</div>{prods.map(p=>({name:p.name,rev:sales.reduce((a,s)=>a+s.items.filter(i=>i.productId===p.id).reduce((b,i)=>b+i.total,0),0)})).sort((a,b)=>b.rev-a.rev).slice(0,5).map((p,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:`1px solid ${T.border}`,fontSize:"11px"}}><div style={{display:"flex",alignItems:"center",gap:"6px"}}><span style={{width:"16px",height:"16px",background:CAT_C[i%4],borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"8px",fontWeight:"700",color:"#000"}}>{i+1}</span>{p.name}</div><span style={{color:T.accent,fontWeight:"700"}}>{pkr(p.rev)}</span></div>)}</div>
+        <div style={css.card}><div style={css.h2}>🏆 Top 5 Products</div>{prods.map(p=>({name:p.name,rev:sales.reduce((a,s)=>a+s.items.filter(i=>(i.pid??i.productId)===p.id).reduce((b,i)=>b+i.total,0),0)})).sort((a,b)=>b.rev-a.rev).slice(0,5).map((p,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:`1px solid ${T.border}`,fontSize:"11px"}}><div style={{display:"flex",alignItems:"center",gap:"6px"}}><span style={{width:"16px",height:"16px",background:CAT_C[i%4],borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"8px",fontWeight:"700",color:"#000"}}>{i+1}</span>{p.name}</div><span style={{color:T.accent,fontWeight:"700"}}>{pkr(p.rev)}</span></div>)}</div>
+      </div>
+
+      {/* ── Phase 5: Daily summary + deep product analytics ── */}
+      <div style={{...css.card,marginTop:"12px",borderLeft:`4px solid ${T.accent}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px"}}>
+          <div><div style={{fontWeight:"800",color:T.accent}}>📋 Aaj ki Daily Summary</div><div style={{fontSize:"11px",color:T.muted}}>Bills: <b>{tsT.length}</b> · Sale: <b style={{color:T.success}}>{pkr(tToday)}</b> · Kharcha: <b style={{color:T.danger}}>{pkr(tExpT)}</b> · Munafa: <b style={{color:T.accent}}>{pkr(tProfit)}</b> · Udhaar: <b style={{color:T.danger}}>{pkr(tUdh)}</b></div></div>
+          <div style={{display:"flex",gap:"6px"}}><button onClick={sendDailyWA} style={css.btn(T.success)}>📱 WhatsApp</button><button onClick={sendDailyEmail} style={css.btn(T.info)}>✉️ Email</button></div>
+        </div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(270px,1fr))",gap:"12px",marginTop:"12px"}}>
+        <div style={css.card}><div style={css.h2}>💵 Munafa by Product (Top 8)</div><div style={{overflowX:"auto"}}><table style={css.tbl}><thead><tr>{["Product","Units","Sale","Munafa"].map(h=><th key={h} style={css.th}>{h}</th>)}</tr></thead><tbody>{topProfit.map((p,i)=><tr key={i}><td style={css.td}>{p.name}</td><td style={css.td}>{p.units}</td><td style={css.td}>{pkr(p.rev)}</td><td style={{...css.td,color:p.profit>=0?T.success:T.danger,fontWeight:"700"}}>{pkr(p.profit)}</td></tr>)}{topProfit.length===0&&<tr><td colSpan={4} style={{...css.td,textAlign:"center",color:T.muted}}>Abhi koi sale nahi</td></tr>}</tbody></table></div></div>
+        <div style={css.card}><div style={css.h2}>🐌 Slow Movers (kam bikne wale)</div><div style={{overflowX:"auto"}}><table style={css.tbl}><thead><tr>{["Product","Bika","Stock","Stock Value"].map(h=><th key={h} style={css.th}>{h}</th>)}</tr></thead><tbody>{slowMovers.map((p,i)=><tr key={i}><td style={css.td}>{p.name}</td><td style={{...css.td,color:p.units===0?T.danger:T.text,fontWeight:p.units===0?"700":"400"}}>{p.units}</td><td style={css.td}>{p.stock}</td><td style={{...css.td,color:T.muted}}>{pkr(p.stockVal)}</td></tr>)}{slowMovers.length===0&&<tr><td colSpan={4} style={{...css.td,textAlign:"center",color:T.muted}}>Koi product nahi</td></tr>}</tbody></table></div></div>
+        <div style={css.card}><div style={css.h2}>🕐 Sales by Hour</div><ResponsiveContainer width="100%" height={170}><BarChart data={byHour} margin={{top:5,right:5,left:-20,bottom:0}}><CartesianGrid strokeDasharray="3 3" stroke={T.border}/><XAxis dataKey="hr" tick={{fill:T.muted,fontSize:9}}/><YAxis tick={{fill:T.muted,fontSize:9}}/><Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,color:T.text,fontSize:10}} formatter={(v)=>pkr(v)}/><Bar dataKey="sale" fill={T.accent} radius={[3,3,0,0]}/></BarChart></ResponsiveContainer><div style={{fontSize:"10px",color:T.muted,textAlign:"center"}}>Kaunse waqt sab se zyada bikri hoti hai</div></div>
       </div>
     </div>
   );
