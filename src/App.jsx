@@ -687,7 +687,7 @@ export default function App() {
         <div style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"14px",height:"100%"}}>
           {mod==="dashboard" && <Dashboard {...sp} todayTotal={todayTotal} todayOnline={todayOnline} todayExp={todayExp} todayProfit={todayProfit} pendingUdh={pendingUdh} lowStock={lowStock} todaySales={todaySales} prods={prods} sales={sales} emps={emps} exps={exps} pendingDR={pendingDR}/>}
           {mod==="pos"       && <POS {...sp} prods={prods} setProds={setProds} custs={custs} emps={emps} sales={sales} setSales={setSales} udh={udh} setUdh={setUdh} dr={dr} setDr={setDr} user={user} buildBill={buildBill} silentPrint={silentPrint} shopInfo={shopInfo} bk={bk} setBk={setBk}/>}
-          {mod==="salehistory"&&<SaleHistory {...sp} sales={sales} setSales={setSales} prods={prods} buildBill={buildBill} silentPrint={silentPrint} shopInfo={shopInfo}/>}
+          {mod==="salehistory"&&<SaleHistory {...sp} sales={sales} setSales={setSales} prods={prods} setProds={setProds} ret={ret} setRet={setRet} buildBill={buildBill} silentPrint={silentPrint} shopInfo={shopInfo}/>}
           {mod==="inventory" && <Inventory {...sp} prods={prods} setProds={setProds} supps={supps} gbc={gbc} ghc={ghc}/>}
           {mod==="barcode"   && <Barcode {...sp} prods={prods}/>}
           {mod==="thermal"   && <Thermal {...sp} sales={sales} buildBill={buildBill} silentPrint={silentPrint} shopInfo={shopInfo}/>}
@@ -1050,8 +1050,30 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
 }
 
 // ── SALE HISTORY ──────────────────────────────────────────────
-function SaleHistory({T,t,css,sales,setSales,prods,buildBill,silentPrint,shopInfo,pkr,td,mon,log,isAdmin,gid}) {
+function SaleHistory({T,t,css,sales,setSales,prods,setProds,ret,setRet,buildBill,silentPrint,shopInfo,pkr,td,mon,log,isAdmin,gid}) {
   const [sq,setSq]=useState("");const [df,setDf]=useState(td().slice(0,7));const [pv,setPv]=useState(null);const [tpl,setTpl]=useState("standard");
+  // ── Return / Exchange against a bill ──
+  const [rb,setRb]=useState(null);          // bill being returned
+  const [rq,setRq]=useState({});            // {pid: returnQty}
+  const [rReason,setRReason]=useState("");
+  const openRet=(s)=>{setRb(s);setRq({});setRReason("");};
+  const retValue=()=>rb?rb.items.reduce((a,it)=>a+((+rq[it.pid]||0)*(+it.price||0)),0):0;
+  const doReturn=()=>{
+    if(!rb)return;const items=rb.items.filter(it=>(+rq[it.pid]||0)>0);
+    if(!items.length)return alert("Kitni qty wapas aa rahi hai woh daalo!");
+    if(items.some(it=>(+rq[it.pid]||0)>it.qty))return alert("Return qty bill se zyada nahi ho sakti!");
+    const refund=retValue();
+    // 1) stock wapas + return records
+    items.forEach(it=>{const q=+rq[it.pid];setProds(p=>p.map(x=>x.id===it.pid?{...x,stock:+((x.stock||0)+q).toFixed(2)}:x));setRet(r=>[...r,{id:gid(),date:td(),customerName:rb.customer,phone:rb.phone||"",productId:it.pid,productName:it.name,qty:q,price:it.price,reason:rReason||"Bill return",type:"Return",billId:rb.id}]);});
+    // 2) original bill adjust (taake sale totals durust rahein)
+    const newItems=rb.items.map(it=>{const q=+rq[it.pid]||0;const nq=+(it.qty-q).toFixed(2);return{...it,qty:nq,total:+(nq*it.price).toFixed(0)};}).filter(it=>it.qty>0);
+    const newSub=newItems.reduce((a,it)=>a+it.total,0);const disc=rb.discount||0;const newTot=Math.max(0,newSub-disc);
+    const newPaid=Math.min(rb.paid||0,newTot);const newRem=Math.max(0,newTot-newPaid);
+    setSales(s=>s.map(x=>x.id===rb.id?{...x,items:newItems,subtotal:newSub,total:newTot,paid:newPaid,remaining:newRem,returned:(x.returned||0)+refund}:x));
+    log("Return",`Bill#${String(rb.id).slice(-6)} — ${items.length} item — Rs.${refund}`);
+    alert(`✅ Return ho gaya!\n💵 Customer ko wapas/credit: Rs.${refund.toLocaleString()}\n\nExchange chahiye to ab naya bill bana lo (ye amount minus kar dena).`);
+    setRb(null);setRq({});setRReason("");
+  };
   const fl=[...sales].filter(s=>(df?s.date.startsWith(df):true)&&(s.customer.toLowerCase().includes(sq.toLowerCase())||String(s.id).includes(sq)||s.salesman.toLowerCase().includes(sq.toLowerCase()))).reverse();
   const total=fl.reduce((a,s)=>a+s.total,0);const paid=fl.reduce((a,s)=>a+s.paid,0);const baaki=fl.reduce((a,s)=>a+s.remaining,0);
   const print=(s)=>silentPrint(buildBill(s,tpl,"Shukriya! Dobara tashreef layen 🙏",shopInfo));
@@ -1086,6 +1108,7 @@ function SaleHistory({T,t,css,sales,setSales,prods,buildBill,silentPrint,shopInf
                 <button onClick={()=>print(s)} style={{...css.btn(),fontSize:"10px",padding:"3px 7px"}}>🖨️</button>
                 <button onClick={()=>setPv(pv?.id===s.id?null:s)} style={{...css.btn(T.info),fontSize:"10px",padding:"3px 7px"}}>👁️</button>
                 <button onClick={()=>wa(s)} style={{...css.btn(T.success),fontSize:"10px",padding:"3px 7px"}}>📱</button>
+                <button onClick={()=>openRet(s)} title="Return / Exchange" style={{...css.btn("#a052e0"),fontSize:"10px",padding:"3px 7px"}}>↩️</button>
                 {isAdmin&&<button onClick={()=>delSale(s.id)} style={{...css.btn(T.danger),fontSize:"10px",padding:"3px 7px"}}>🗑️</button>}
               </div></td>
             </tr>
@@ -1094,6 +1117,20 @@ function SaleHistory({T,t,css,sales,setSales,prods,buildBill,silentPrint,shopInf
         </table>
       </div>
       {pv&&<div style={{...css.card,marginTop:"12px"}}><div style={{fontWeight:"700",color:T.accent,marginBottom:"8px"}}>👁️ Bill #{String(pv.id).slice(-5)} — {pv.customer}</div>{pv.items.map((it,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:"11px",padding:"3px 0",borderBottom:`1px solid ${T.border}33`}}><span>{it.name} × {it.qty}{it.unit}</span><span style={{color:T.accent}}>{pkr(it.total)}</span></div>)}<div style={{marginTop:"6px",fontWeight:"800",color:T.accent}}>TOTAL: {pkr(pv.total)} | Paid: {pkr(pv.paid)}{pv.remaining>0&&<span style={{color:T.danger}}> | Baaki: {pkr(pv.remaining)}</span>}</div></div>}
+      {rb&&<div style={css.modal}><div style={css.mb("440px")}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:"6px"}}><div style={{fontWeight:"800",color:"#a052e0"}}>↩️ Return / Exchange — Bill #{String(rb.id).slice(-6)}</div><button onClick={()=>setRb(null)} style={css.btnO}>✕</button></div>
+        <div style={{fontSize:"11px",color:T.muted,marginBottom:"8px"}}>{rb.customer} · {rb.date} — kitni qty wapas aa rahi hai woh likho:</div>
+        <div style={{maxHeight:"230px",overflow:"auto"}}>{rb.items.map(it=><div key={it.pid} style={{display:"flex",alignItems:"center",gap:"6px",padding:"5px 0",borderBottom:`1px solid ${T.border}`,fontSize:"11px"}}>
+          <div style={{flex:1,minWidth:0}}><div style={{fontWeight:"600"}}>{it.name}</div><div style={{fontSize:"9px",color:T.muted}}>Becha: {it.qty}{it.unit} × {pkr(it.price)}</div></div>
+          <input type="number" min="0" max={it.qty} value={rq[it.pid]||""} onChange={e=>{const v=Math.min(+e.target.value||0,it.qty);setRq(q=>({...q,[it.pid]:v}));}} style={{...css.inp,width:"60px",padding:"3px 5px"}} placeholder="0"/>
+          <span style={{width:"64px",textAlign:"right",color:"#a052e0",fontWeight:"700"}}>{pkr((+rq[it.pid]||0)*it.price)}</span>
+        </div>)}</div>
+        <label style={css.lbl}>Wajah (reason)</label>
+        <input value={rReason} onChange={e=>setRReason(e.target.value)} style={css.inp} placeholder="e.g. size theek nahi / rang pasand nahi"/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"10px 0 6px",fontWeight:"800"}}><span>Wapsi / Credit:</span><span style={{color:"#a052e0",fontSize:"15px"}}>{pkr(retValue())}</span></div>
+        <div style={{fontSize:"9px",color:T.muted,marginBottom:"8px"}}>✅ Stock wapas add ho jayega · bill adjust ho jayega · 🔄 exchange ke liye iske baad naya bill bana lo</div>
+        <div style={css.row}><button onClick={doReturn} style={{...css.btn("#a052e0"),flex:1}}>↩️ Confirm Return</button><button onClick={()=>setRb(null)} style={css.btnO}>Cancel</button></div>
+      </div></div>}
     </div>
   );
 }
