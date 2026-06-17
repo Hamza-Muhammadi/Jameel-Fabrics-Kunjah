@@ -313,7 +313,10 @@ export default function App() {
   const [pinInput,setPinInput] = useState("");
   const [gSearch,setGSearch] = useState("");
   const [showGSearch,setShowGSearch] = useState(false);
+  const gSearchRef = useRef(null);
   const pinTimer = useRef(null);
+  // Ctrl+K / Cmd+K → focus global search from anywhere
+  useEffect(()=>{const h=(e)=>{if((e.ctrlKey||e.metaKey)&&String(e.key).toLowerCase()==="k"){e.preventDefault();setShowGSearch(true);if(gSearchRef.current)gSearchRef.current.focus();}};window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h);},[]);
   const shopInfoDef = {name:"Jameel Fabrics Kunjah",address:"Circular Road Kunjah, Distt Gujrat",phone:"03008722232",whatsapp:"03008722232",tiktok:"@jameelfabrics",instagram:"@jameelfabrics",website:"jameelfabrics.vercel.app"};
 
   const [users,setUsers]   = useState(()=>LS.get("users",SEED.users));
@@ -612,7 +615,7 @@ export default function App() {
         <button onClick={()=>setSideOpen(!sideOpen)} style={css.iBtn}>☰</button>
         <span style={{fontWeight:"900",fontSize:"14px",color:T.accent,whiteSpace:"nowrap"}}>🧵 {t.appName}</span>
         <div style={{flex:1,maxWidth:"280px",position:"relative"}}>
-          <input value={gSearch} onChange={e=>{setGSearch(e.target.value);setShowGSearch(true);}} onFocus={()=>setShowGSearch(true)} onBlur={()=>setTimeout(()=>setShowGSearch(false),200)} style={{...css.inp,padding:"4px 10px",fontSize:"11px",height:"32px"}} placeholder="🔍 Global search..."/>
+          <input ref={gSearchRef} value={gSearch} onChange={e=>{setGSearch(e.target.value);setShowGSearch(true);}} onFocus={()=>setShowGSearch(true)} onBlur={()=>setTimeout(()=>setShowGSearch(false),200)} onKeyDown={e=>{if(e.key==="Escape"){setGSearch("");setShowGSearch(false);e.target.blur();}}} style={{...css.inp,padding:"4px 10px",fontSize:"11px",height:"32px"}} placeholder="🔍 Search (Ctrl+K)..."/>
           {showGSearch&&gSearch.length>1&&(()=>{const q=gSearch.toLowerCase();const rp=prods.filter(p=>p.name.toLowerCase().includes(q)||p.barcode.includes(q)).slice(0,3);const rc=custs.filter(c=>c.name.toLowerCase().includes(q)||c.phone.includes(q)).slice(0,3);const rs=sales.filter(s=>s.customer.toLowerCase().includes(q)||String(s.id).includes(q)).slice(0,3);return(rp.length||rc.length||rs.length)?(<div style={{position:"absolute",top:"36px",left:0,right:0,background:T.card,border:`1px solid ${T.border}`,borderRadius:"10px",zIndex:999,maxHeight:"280px",overflow:"auto",boxShadow:"0 8px 24px #0008"}}>
             {rp.length>0&&<><div style={{padding:"5px 10px",fontSize:"9px",color:T.muted,fontWeight:"700"}}>📦 PRODUCTS</div>{rp.map(p=><div key={p.id} onClick={()=>{setMod("inventory");setGSearch("");setShowGSearch(false);}} style={{padding:"6px 10px",cursor:"pointer",fontSize:"11px",borderBottom:`1px solid ${T.border}33`}}><strong>{p.name}</strong> — <span style={{color:T.accent}}>{pkr(p.salePrice)}</span> <span style={{color:T.muted}}>Stock:{p.stock}</span></div>)}</>}
             {rc.length>0&&<><div style={{padding:"5px 10px",fontSize:"9px",color:T.muted,fontWeight:"700"}}>👥 CUSTOMERS</div>{rc.map(c=><div key={c.id} onClick={()=>{setMod("customers");setGSearch("");setShowGSearch(false);}} style={{padding:"6px 10px",cursor:"pointer",fontSize:"11px",borderBottom:`1px solid ${T.border}33`}}><strong>{c.name}</strong> — <span style={{color:T.muted}}>{c.phone}</span></div>)}</>}
@@ -802,6 +805,7 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
   const [qi,setQi]=useState({});
   const [bill,setBill]=useState(null);
   const [tpl,setTpl]=useState("premium");
+  const searchRef=useRef(null);
   const [showDR,setShowDR]=useState(false);
   const [drNote,setDrNote]=useState("");
   const [custMsg,setCustMsg]=useState("Shukriya! Dobara tashreef layen 🙏");
@@ -855,6 +859,9 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
     setBill(s);setCart([]);setDisc(0);setDiscPct(0);setPaid(0);setPaid2(0);setSplitPay(false);setDealing("");
   };
 
+  // Repeat last bill — load the most recent sale's items back into the cart
+  const repeatLast=()=>{const last=sales[sales.length-1];if(!last||!last.items||!last.items.length)return alert("Koi pichla bill nahi!");if(cart.length&&!window.confirm("Mojooda cart replace karein?"))return;setCart(last.items.map(i=>({pid:i.pid,name:i.name,qty:i.qty,unit:i.unit,price:i.price,total:+(((i.qty)||0)*((i.price)||0)).toFixed(0),bonus:i.bonus,onOffer:i.onOffer,maxD:i.maxD,itemSman:i.itemSman})));};
+
   // Hold / Resume bills (park a customer's cart, serve another, resume later)
   const [held,setHeld]=useState(()=>LS.get("pos_held",[]));
   useEffect(()=>{LS.set("pos_held",held);},[held]);
@@ -870,6 +877,13 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
     setSplitPay(hb.splitPay||false);setPaid(hb.paid||0);setPaid2(hb.paid2||0);setTpl(hb.tpl||"standard");
     setHeld(h=>h.filter(x=>x.id!==hb.id));
   };
+
+  // Keyboard shortcuts — F9 checkout, F2 search, F4 hold (works even while typing)
+  useEffect(()=>{const h=(e)=>{
+    if(e.key==="F9"){e.preventDefault();checkout();}
+    else if(e.key==="F2"){e.preventDefault();if(searchRef.current)searchRef.current.focus();}
+    else if(e.key==="F4"){e.preventDefault();holdBill();}
+  };window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h);});
 
   // Barcode scan: scanner types the code then Enter → add the exact match
   const onScan=(e)=>{
@@ -955,12 +969,14 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
         {/* RIGHT — Products */}
         <div>
           <div style={css.row}>
-            <input value={sq} onChange={e=>setSq(e.target.value)} onKeyDown={onScan} style={{...css.inp,flex:1}} placeholder="🔍 Naam / barcode (scan + Enter) / rang..."/>
+            <input ref={searchRef} value={sq} onChange={e=>setSq(e.target.value)} onKeyDown={onScan} style={{...css.inp,flex:1}} placeholder="🔍 Naam / barcode (scan + Enter) / rang...  (F2)"/>
             <select value={cf} onChange={e=>setCf(e.target.value)} style={{...css.sel,width:"170px"}}>
               <option value="All">All</option>{CATS.map(c=><option key={c} value={c}>{c.split(" ").slice(0,2).join(" ")}</option>)}
             </select>
             <button onClick={()=>setFavOnly(f=>!f)} title="Sirf favorites" style={{...css.btn(favOnly?"#f5a623":T.surface),color:favOnly?"#fff":T.text,border:`1px solid ${T.border}`,padding:"8px 12px"}}>{favOnly?"★":"☆"} Fav</button>
+            <button onClick={repeatLast} title="Pichla bill dobara load karo" style={{...css.btn(T.surface),color:T.text,border:`1px solid ${T.border}`,padding:"8px 12px"}}>↺ Repeat</button>
           </div>
+          <div style={{fontSize:"9px",color:T.muted,margin:"2px 0 4px"}}>⌨️ Shortcuts: <b>F2</b> search · <b>F4</b> hold · <b>F9</b> checkout · <b>Ctrl+K</b> global search</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:"7px",marginTop:"8px",maxHeight:"calc(100vh - 200px)",overflow:"auto"}}>
             {fl.map(p=>(
               <div key={p.id} style={{background:T.card,border:`1px solid ${p.stock<=5?T.danger+"55":p._off?T.accent+"44":T.border}`,borderRadius:"9px",padding:"9px"}}>
