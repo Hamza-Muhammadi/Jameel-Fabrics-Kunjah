@@ -198,17 +198,18 @@ function buildBill(bill,tpl="standard",msg="Shukriya! Dobara tashreef layen 🙏
   const D=`<div style="border-top:2px dashed #000;margin:5px 0"></div>`;
   const H=`<div style="text-align:center;font-weight:900"><div style="font-size:16px;font-weight:900">*** ${si.name.toUpperCase()} ***</div><div style="font-size:11px;font-weight:900">${si.address}</div><div style="font-size:11px;font-weight:900">Tel/WA: ${si.phone}</div>${si.tiktok?`<div style="font-size:10px;font-weight:900">TikTok:${si.tiktok} | IG:${si.instagram||""}</div>`:""}</div>`;
   const I=`<div style="font-size:12px;font-weight:900"><div style="display:flex;justify-content:space-between"><span>Date: ${bill.date}</span><span># ${String(bill.id).slice(-6)}</span></div><div>Customer: ${bill.customer||"Walk-in"}${bill.phone?` | ${bill.phone}`:""}</div><div style="display:flex;justify-content:space-between"><span>By: ${bill.salesman}${bill.dealing?` / ${bill.dealing}`:""}</span><span>${bill.payment}</span></div></div>`;
-  const rows=bill.items.map(i=>`<tr><td style="padding:3px 1px;font-size:12px;font-weight:900">${i.name}${i.onOffer?" [OFFER]":""}</td><td style="padding:3px 1px;text-align:center;font-size:12px;font-weight:900;white-space:nowrap">${i.qty}${i.unit}</td><td style="padding:3px 1px;text-align:right;font-size:12px;font-weight:900">${Number(i.price).toLocaleString()}</td><td style="padding:3px 1px;text-align:right;font-weight:900;font-size:12px">${Number(i.total).toLocaleString()}</td></tr>`).join("");
+  const rows=bill.items.map(i=>`<tr><td style="padding:3px 2px;font-size:12px;font-weight:900;word-break:break-word;overflow-wrap:break-word;vertical-align:top">${i.name}${i.onOffer?" [OFFER]":""}</td><td style="padding:3px 2px;text-align:center;font-size:12px;font-weight:900;white-space:nowrap;vertical-align:top">${i.qty}${i.unit}</td><td style="padding:3px 2px;text-align:right;font-size:12px;font-weight:900;white-space:nowrap;vertical-align:top">${Number(i.price).toLocaleString()}</td><td style="padding:3px 2px;text-align:right;font-weight:900;font-size:12px;white-space:nowrap;vertical-align:top">${Number(i.total).toLocaleString()}</td></tr>`).join("");
   const tots=`${bill.discount>0?`<tr><td colspan="3" style="text-align:right;font-size:12px;font-weight:900;color:red">Discount:</td><td style="text-align:right;font-size:12px;font-weight:900;color:red">-Rs.${Number(bill.discount).toLocaleString()}</td></tr>`:""}<tr style="border-top:2px solid #000"><td colspan="3" style="text-align:right;font-size:14px;font-weight:900;padding:4px 1px">TOTAL:</td><td style="text-align:right;font-size:14px;font-weight:900;padding:4px 1px">Rs.${Number(bill.total).toLocaleString()}</td></tr><tr><td colspan="3" style="text-align:right;font-size:12px;font-weight:900;padding:3px 1px">Paid:</td><td style="text-align:right;font-size:12px;font-weight:900;color:green;padding:3px 1px">Rs.${Number(bill.paid).toLocaleString()}</td></tr><tr><td colspan="3" style="text-align:right;font-size:13px;font-weight:900;color:${bill.remaining>0?"red":"green"};padding:3px 1px">Remaining:</td><td style="text-align:right;font-size:13px;font-weight:900;color:${bill.remaining>0?"red":"green"};padding:3px 1px">Rs.${Number(bill.remaining).toLocaleString()}</td></tr>`;
-  const P=`<div style="font-size:10px;font-weight:900;text-align:center;line-height:1.8">Receipt k baghair wapsi nahi<br/>Sale/Offer items non-returnable<br/>Exchange 2-3 din andar</div>`;
+  const polTxt=(si.billPolicy&&String(si.billPolicy).trim())||"Receipt k baghair wapsi nahi\nSale/Offer items non-returnable\nExchange 2-3 din andar";
+  const P=`<div style="font-size:10px;font-weight:900;text-align:center;line-height:1.7">${polTxt.split("\n").filter(l=>l.trim()).map(l=>l.trim()).join("<br/>")}</div>`;
   const F=`<div style="text-align:center;font-size:11px;font-weight:900;margin-top:4px">${msg}<br/>TikTok:${si.tiktok||""} | IG:${si.instagram||""} | WA:${si.phone}</div>`;
   // QR codes — Online Store (website) + Shop Location (Google Maps). Generated from URLs.
   const qrImg=(u)=>`https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=0&data=${encodeURIComponent(u)}`;
   const webUrl=si.website?(/^https?:\/\//.test(si.website)?si.website:"https://"+si.website):"";
   const mapUrl=si.mapUrl||(si.address?`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((si.name||"")+" "+si.address)}`:"");
   const QR=(webUrl||mapUrl)?`<div style="display:flex;justify-content:space-around;margin-top:6px;border-top:1px dashed #000;padding-top:6px;text-align:center">${webUrl?`<div><img src="${qrImg(webUrl)}" style="width:24mm;height:24mm"/><div style="font-size:9px;font-weight:900">🛒 Online Store</div></div>`:""}${mapUrl?`<div><img src="${qrImg(mapUrl)}" style="width:24mm;height:24mm"/><div style="font-size:9px;font-weight:900">📍 Location</div></div>`:""}</div>`:"";
-  if(tpl==="premium")return`<div style="width:72mm;font-family:Arial,'Segoe UI',sans-serif;color:#000;font-weight:600">
-    <div style="border:2px solid #000;padding:7px 6px;text-align:center;margin-bottom:6px">
+  if(tpl==="premium")return`<div style="width:72mm;box-sizing:border-box;padding:2.5mm;font-family:Arial,'Segoe UI',sans-serif;color:#000;font-weight:600">
+    <div style="border:2px solid #000;box-sizing:border-box;width:100%;padding:6px;text-align:center;margin-bottom:6px">
       <div style="font-size:18px;font-weight:900;letter-spacing:1px">${si.name.toUpperCase()}</div>
       <div style="font-size:8px;letter-spacing:2px">PREMIUM FABRICS &middot; SINCE 1975</div>
       <div style="font-size:10px;margin-top:3px">${si.address}</div>
@@ -217,12 +218,13 @@ function buildBill(bill,tpl="standard",msg="Shukriya! Dobara tashreef layen 🙏
     <div style="font-size:11px;display:flex;justify-content:space-between"><span>Bill #${String(bill.id).slice(-6)}</span><span>${bill.date}</span></div>
     <div style="font-size:11px">Customer: ${bill.customer||"Walk-in"}${bill.phone?" &middot; "+bill.phone:""}</div>
     <div style="font-size:11px;margin-bottom:3px">By: ${bill.salesman}${bill.dealing?" / "+bill.dealing:""} &middot; Pay: ${bill.payment}</div>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;font-weight:700">
-      <thead><tr><th style="text-align:left;border-top:1.5px solid #000;border-bottom:1.5px solid #000;padding:3px 1px">ITEM</th><th style="text-align:center;border-top:1.5px solid #000;border-bottom:1.5px solid #000">QTY</th><th style="text-align:right;border-top:1.5px solid #000;border-bottom:1.5px solid #000">RATE</th><th style="text-align:right;border-top:1.5px solid #000;border-bottom:1.5px solid #000">AMT</th></tr></thead>
+    <table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:11px;font-weight:700">
+      <colgroup><col style="width:48%"/><col style="width:16%"/><col style="width:18%"/><col style="width:18%"/></colgroup>
+      <thead><tr><th style="text-align:left;border-top:1.5px solid #000;border-bottom:1.5px solid #000;padding:3px 2px">ITEM</th><th style="text-align:center;border-top:1.5px solid #000;border-bottom:1.5px solid #000;padding:3px 2px">QTY</th><th style="text-align:right;border-top:1.5px solid #000;border-bottom:1.5px solid #000;padding:3px 2px">RATE</th><th style="text-align:right;border-top:1.5px solid #000;border-bottom:1.5px solid #000;padding:3px 2px">AMT</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     ${bill.discount>0?`<div style="text-align:right;font-size:11px;margin-top:3px">Discount: -Rs.${Number(bill.discount).toLocaleString()}</div>`:""}
-    <div style="border:2px solid #000;text-align:center;padding:5px;margin:5px 0"><span style="font-size:17px;font-weight:900">TOTAL &nbsp; Rs.${Number(bill.total).toLocaleString()}</span></div>
+    <div style="border:2px solid #000;box-sizing:border-box;width:100%;text-align:center;padding:5px;margin:5px 0"><span style="font-size:17px;font-weight:900">TOTAL &nbsp; Rs.${Number(bill.total).toLocaleString()}</span></div>
     <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700"><span>Paid: Rs.${Number(bill.paid).toLocaleString()}</span><span>Baaki: Rs.${Number(bill.remaining).toLocaleString()}</span></div>
     <div style="border-top:1px dashed #000;margin:5px 0"></div>
     ${P}
@@ -1358,6 +1360,9 @@ function Thermal({T,t,css,sales,buildBill,silentPrint,pkr,shopInfo}) {
     phone: ts.shopPhone||shopInfo?.phone||"03008722232",
     tiktok: shopInfo?.tiktok||"",
     instagram: shopInfo?.instagram||"",
+    website: shopInfo?.website||"",
+    mapUrl: shopInfo?.mapUrl||"",
+    billPolicy: shopInfo?.billPolicy||"",
   });
 
   const print=(bill)=>{
@@ -2287,6 +2292,8 @@ function Settings({T,t,css,theme,setTheme,lang,setLang,users,setUsers,isAdmin,sh
           {editShop?(<>
             {[["name","Naam"],["address","Pata"],["phone","Phone"],["whatsapp","WhatsApp"],["tiktok","TikTok ID"],["instagram","Instagram ID"],["website","Website (Online Store) — receipt QR"],["mapUrl","Google Maps Link (Location) — receipt QR"]].map(([k,l])=><div key={k}><label style={css.lbl}>{l}</label><input value={si[k]||""} onChange={e=>setSi({...si,[k]:e.target.value})} style={css.inp} placeholder={k==="mapUrl"?"Google Maps share link paste karo":k==="website"?"jameelfabrics.vercel.app":""}/></div>)}
             <div style={{fontSize:"9px",color:T.muted,marginTop:"4px"}}>💡 Premium receipt pe 2 QR chhapte hain: 🛒 Online Store (website) + 📍 Location (Maps). Maps link na ho to address se auto ban jata hai.</div>
+            <label style={css.lbl}>📝 Bill ki Policy / Exchange Lines (har line alag — receipt pe neeche chhapengi)</label>
+            <textarea value={si.billPolicy!==undefined?si.billPolicy:"Receipt k baghair wapsi nahi\nSale/Offer items non-returnable\nExchange 2-3 din andar"} onChange={e=>setSi({...si,billPolicy:e.target.value})} style={{...css.inp,height:"72px",resize:"vertical",fontFamily:"inherit"}} placeholder={"Receipt k baghair wapsi nahi\nExchange 3 din andar..."}/>
             <div style={{...css.row,marginTop:"8px"}}><button onClick={saveShop} style={{...css.btn(),flex:1}}>💾 Save</button><button onClick={()=>{setSi({...shopInfo});setEditShop(false);}} style={css.btnO}>Cancel</button></div>
           </>):(
             <>{Object.entries(shopInfo||{}).filter(([k])=>k!=="payQR").map(([k,v])=><div key={k} style={{fontSize:"11px",marginBottom:"4px"}}><span style={{color:T.muted}}>{k}: </span><strong style={{wordBreak:"break-all"}}>{v}</strong></div>)}
