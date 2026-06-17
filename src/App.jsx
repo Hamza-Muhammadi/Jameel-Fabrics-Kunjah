@@ -99,6 +99,10 @@ const LANGS = {ro:T_RO, en:T_EN, ur:T_UR};
 
 const CATS = ["Mens Unstitched","Women Unstitched 3P","Women Stitched 2P+3P","Women Unstitched 2P","Other"];
 const PAY_TYPES = ["Cash","Easypaisa","JazzCash","Bank Transfer"];
+const WEB_PAY = "Website-Online";
+const POS_PAY = [...PAY_TYPES, WEB_PAY];
+// A bill paid via the website is tracked separately and is NOT counted in physical-shop sale totals
+const isWebOnline = (s)=>String(s&&s.payment||"").includes(WEB_PAY);
 const EXP_TYPES = ["Tea/Food","Transport","Salary","Electricity","Rent","Miscellaneous"];
 const ROLES = ["Admin","Salesman","Manager","Cashier"];
 const LOYALTY = ["Silver","Gold","Platinum","VIP"];
@@ -373,9 +377,12 @@ export default function App() {
   const log = (action,detail)=>{ if(!user)return; const l={id:gid(),time:new Date().toLocaleString(),date:td(),userName:user.name,user:user.name,action,detail}; setLogs(prev=>[l,...prev.slice(0,199)]); db.upsert("activity_logs",{id:l.id,date:l.date,user_name:l.userName,action,detail}); };
 
   const todaySales = sales.filter(s=>s.date===td());
-  const todayTotal = todaySales.reduce((a,s)=>a+s.total,0);
+  const todayPhys  = todaySales.filter(s=>!isWebOnline(s));   // physical-shop bills
+  const todayWeb   = todaySales.filter(s=>isWebOnline(s));    // website-online bills (counted separately)
+  const todayTotal = todayPhys.reduce((a,s)=>a+s.total,0);
+  const todayOnline= todayWeb.reduce((a,s)=>a+s.total,0);
   const todayExp   = exps.filter(e=>e.date===td()).reduce((a,e)=>a+Number(e.amount),0);
-  const todayProfit = todaySales.reduce((a,s)=>a+s.items.reduce((b,i)=>{const p=prods.find(pr=>pr.id===(i.pid??i.productId));return b+(p?(i.price-p.costPrice)*i.qty:0);},0),0)-todayExp;
+  const todayProfit = todayPhys.reduce((a,s)=>a+s.items.reduce((b,i)=>{const p=prods.find(pr=>pr.id===(i.pid??i.productId));return b+(p?(i.price-p.costPrice)*i.qty:0);},0),0)-todayExp;
   const pendingUdh = udh.reduce((a,u)=>a+u.remaining,0);
   const lowStock   = prods.filter(p=>p.stock<=5);
   const pendingDR  = dr.filter(d=>d.status==="Pending");
@@ -650,7 +657,7 @@ export default function App() {
 
         {/* MAIN — apna alag scroll */}
         <div style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"14px",height:"100%"}}>
-          {mod==="dashboard" && <Dashboard {...sp} todayTotal={todayTotal} todayExp={todayExp} todayProfit={todayProfit} pendingUdh={pendingUdh} lowStock={lowStock} todaySales={todaySales} prods={prods} sales={sales} emps={emps} exps={exps} pendingDR={pendingDR}/>}
+          {mod==="dashboard" && <Dashboard {...sp} todayTotal={todayTotal} todayOnline={todayOnline} todayExp={todayExp} todayProfit={todayProfit} pendingUdh={pendingUdh} lowStock={lowStock} todaySales={todaySales} prods={prods} sales={sales} emps={emps} exps={exps} pendingDR={pendingDR}/>}
           {mod==="pos"       && <POS {...sp} prods={prods} setProds={setProds} custs={custs} emps={emps} sales={sales} setSales={setSales} udh={udh} setUdh={setUdh} dr={dr} setDr={setDr} user={user} buildBill={buildBill} silentPrint={silentPrint} shopInfo={shopInfo} bk={bk} setBk={setBk}/>}
           {mod==="salehistory"&&<SaleHistory {...sp} sales={sales} setSales={setSales} prods={prods} buildBill={buildBill} silentPrint={silentPrint} shopInfo={shopInfo}/>}
           {mod==="inventory" && <Inventory {...sp} prods={prods} setProds={setProds} supps={supps} gbc={gbc} ghc={ghc}/>}
@@ -706,14 +713,14 @@ function Login({users,onLogin,T,t,css}) {
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────
-function Dashboard({T,t,css,todayTotal,todayExp,todayProfit,pendingUdh,lowStock,todaySales,prods,sales,emps,exps,pendingDR,pkr,mon}) {
+function Dashboard({T,t,css,todayTotal,todayOnline,todayExp,todayProfit,pendingUdh,lowStock,todaySales,prods,sales,emps,exps,pendingDR,pkr,mon}) {
   const last7=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-(6-i));const ds=d.toISOString().split("T")[0];return{day:d.toLocaleDateString("en",{weekday:"short"}),sale:sales.filter(s=>s.date===ds).reduce((a,s)=>a+s.total,0),exp:exps.filter(e=>e.date===ds).reduce((a,e)=>a+e.amount,0)};});
   const catData=CATS.map((c,i)=>({name:c.split(" ").slice(0,2).join(" "),value:sales.reduce((a,s)=>a+s.items.filter(it=>{const p=prods.find(pr=>pr.id===(it.pid??it.productId));return p&&p.category===c;}).reduce((b,it)=>b+it.total,0),0),color:CAT_C[i]}));
   return(
     <div>
       <div style={css.h1}>📊 {t.dashboard} <span style={{fontSize:"11px",color:T.muted,fontWeight:"400"}}>— {td()}</span></div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"10px",marginBottom:"14px"}}>
-        {[{l:t.todaySale,v:pkr(todayTotal),i:"💰",c:T.success},{l:t.totalExpense,v:pkr(todayExp),i:"🧾",c:T.danger},{l:t.netProfit,v:pkr(todayProfit),i:"📈",c:T.accent},{l:t.pendingUdhaar,v:pkr(pendingUdh),i:"⚠️",c:"#e0a052"},{l:"Bills",v:todaySales.length,i:"🧾",c:T.info},{l:"Disc Req",v:pendingDR.length,i:"🎯",c:"#a052e0"}].map((s,i)=>(
+        {[{l:t.todaySale+" (Shop)",v:pkr(todayTotal),i:"💰",c:T.success},...(todayOnline>0?[{l:"Website Sale",v:pkr(todayOnline),i:"🌐",c:T.info}]:[]),{l:t.totalExpense,v:pkr(todayExp),i:"🧾",c:T.danger},{l:t.netProfit,v:pkr(todayProfit),i:"📈",c:T.accent},{l:t.pendingUdhaar,v:pkr(pendingUdh),i:"⚠️",c:"#e0a052"},{l:"Bills",v:todaySales.length,i:"🧾",c:T.info},{l:"Disc Req",v:pendingDR.length,i:"🎯",c:"#a052e0"}].map((s,i)=>(
           <div key={i} style={css.sc(s.c)}><div style={{fontSize:"18px"}}>{s.i}</div><div style={{fontSize:"17px",fontWeight:"900",color:s.c}}>{s.v}</div><div style={{fontSize:"10px",color:T.muted}}>{s.l}</div></div>
         ))}
       </div>
@@ -907,7 +914,7 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
               <label style={css.lbl}>Payment Split?</label>
               <input type="checkbox" checked={splitPay} onChange={e=>setSplitPay(e.target.checked)}/>
             </div>
-            {!splitPay&&<><label style={css.lbl}>Payment</label><select value={pay} onChange={e=>setPay(e.target.value)} style={css.sel}>{PAY_TYPES.map(p=><option key={p} value={p}>{p}</option>)}</select></>}
+            {!splitPay&&<><label style={css.lbl}>Payment</label><select value={pay} onChange={e=>setPay(e.target.value)} style={css.sel}>{POS_PAY.map(p=><option key={p} value={p}>{p==="Website-Online"?"🌐 Website-Online":p}</option>)}</select>{pay==="Website-Online"&&<div style={{fontSize:"10px",color:T.info,marginTop:"2px"}}>🌐 Website order — alag count hoga, shop sale me add nahi</div>}</>}
             {splitPay&&<div style={css.g2}>
               <div><label style={css.lbl}>Pay 1</label><select value={pay} onChange={e=>setPay(e.target.value)} style={css.sel}>{PAY_TYPES.map(p=><option key={p} value={p}>{p}</option>)}</select></div>
               <div><label style={css.lbl}>Pay 2</label><select value={pay2} onChange={e=>setPay2(e.target.value)} style={css.sel}>{PAY_TYPES.map(p=><option key={p} value={p}>{p}</option>)}</select></div>
@@ -1816,7 +1823,7 @@ function Offers({T,t,css,prods,setProds,pkr,td}) {
 // ── CASH CLOSE ────────────────────────────────────────────────
 function CashClose({T,t,css,cc,setCc,sales,exps,gid,pkr,td,log}) {
   const [sf,setSf]=useState(false);const already=cc.find(c=>c.date===td());
-  const tc=sales.filter(s=>s.date===td()&&s.payment==="Cash").reduce((a,s)=>a+s.paid,0);const to=sales.filter(s=>s.date===td()&&s.payment!=="Cash").reduce((a,s)=>a+s.paid,0);const te=exps.filter(e=>e.date===td()).reduce((a,e)=>a+e.amount,0);
+  const tc=sales.filter(s=>s.date===td()&&s.payment==="Cash").reduce((a,s)=>a+s.paid,0);const to=sales.filter(s=>s.date===td()&&s.payment!=="Cash"&&!isWebOnline(s)).reduce((a,s)=>a+s.paid,0);const te=exps.filter(e=>e.date===td()).reduce((a,e)=>a+e.amount,0);
   const [fm,setFm]=useState({openingCash:0,cashTaken:0,notes:""});
   const close=()=>{const rec={id:gid(),date:td(),openingCash:+fm.openingCash,totalSaleCash:tc,totalSaleOnline:to,totalExpense:te,cashExpected:+fm.openingCash+tc-te,cashTaken:+fm.cashTaken,closingCash:+fm.openingCash+tc-te-+fm.cashTaken,notes:fm.notes,closedAt:new Date().toTimeString().slice(0,5)};setCc(c=>[...c,rec]);log("Cash Closing",`Rs.${rec.closingCash}`);setSf(false);};
   return(
@@ -1836,24 +1843,26 @@ function Analytics({T,t,css,sales,exps,prods,emps,custs,att,pkr,mon,td}) {
   const iid=it=>it.pid??it.productId;
   const catData=CATS.map((c,i)=>({name:c.split(" ").slice(0,2).join(" "),value:sales.reduce((a,s)=>a+s.items.filter(it=>{const p=prods.find(pr=>pr.id===iid(it));return p&&p.category===c;}).reduce((b,it)=>b+it.total,0),0),color:CAT_C[i]}));
   const payData=PAY_TYPES.map(pt=>({name:pt,value:sales.filter(s=>s.payment===pt).reduce((a,s)=>a+s.total,0)})).filter(p=>p.value>0);
-  const totSale=sales.reduce((a,s)=>a+s.total,0);const totExp=exps.reduce((a,e)=>a+e.amount,0);
+  const physAll=sales.filter(s=>!isWebOnline(s));const webAll=sales.filter(s=>isWebOnline(s));
+  const totSale=physAll.reduce((a,s)=>a+s.total,0);const totOnline=webAll.reduce((a,s)=>a+s.total,0);const totExp=exps.reduce((a,e)=>a+e.amount,0);
   // ── Phase 5: per-product profit, slow movers, sales-by-hour, daily summary ──
   const prodStats=prods.map(p=>{let u=0,r=0;sales.forEach(s=>(s.items||[]).forEach(it=>{if(iid(it)===p.id){u+=Number(it.qty)||0;r+=Number(it.total)||0;}}));const cost=u*(p.costPrice||0);return{id:p.id,name:p.name,units:+u.toFixed(2),rev:r,cost,profit:r-cost,stock:p.stock,stockVal:(p.stock||0)*(p.costPrice||0)};});
   const topProfit=[...prodStats].filter(p=>p.units>0).sort((a,b)=>b.profit-a.profit).slice(0,8);
   const slowMovers=[...prodStats].filter(p=>p.stock>0).sort((a,b)=>a.units-b.units).slice(0,8);
   const byHour=Array.from({length:13},(_,k)=>{const h=k+9;return{hr:((h>12?h-12:h))+(h>=12?"p":"a"),sale:sales.filter(s=>s.hour===h).reduce((a,s)=>a+s.total,0),bills:sales.filter(s=>s.hour===h).length};});
-  const tsT=sales.filter(s=>s.date===td());const tToday=tsT.reduce((a,s)=>a+s.total,0);const tExpT=exps.filter(e=>e.date===td()).reduce((a,e)=>a+e.amount,0);
+  const tsAll=sales.filter(s=>s.date===td());const tsT=tsAll.filter(s=>!isWebOnline(s));const tsWeb=tsAll.filter(s=>isWebOnline(s));
+  const tToday=tsT.reduce((a,s)=>a+s.total,0);const tOnline=tsWeb.reduce((a,s)=>a+s.total,0);const tExpT=exps.filter(e=>e.date===td()).reduce((a,e)=>a+e.amount,0);
   const tProfit=tsT.reduce((a,s)=>a+(s.items||[]).reduce((b,it)=>{const p=prods.find(pr=>pr.id===iid(it));return b+(p?((it.price-p.costPrice)*(Number(it.qty)||0)):0);},0),0)-tExpT;
   const tUdh=tsT.reduce((a,s)=>a+(s.remaining||0),0);
   const topToday=[...prodStats].filter(p=>p.units>0).sort((a,b)=>b.rev-a.rev).slice(0,3).map(p=>p.name).join(", ")||"—";
-  const dailyMsg=`📊 *Jameel Fabrics — Daily Summary*\n📅 ${td()}\n\n🧾 Bills: ${tsT.length}\n💰 Sale: ${pkr(tToday)}\n🧮 Kharcha: ${pkr(tExpT)}\n📈 Munafa: ${pkr(tProfit)}\n💳 Aaj ka Udhaar: ${pkr(tUdh)}\n\n🏆 Top: ${topToday}`;
+  const dailyMsg=`📊 *Jameel Fabrics — Daily Summary*\n📅 ${td()}\n\n🧾 Bills: ${tsT.length}\n💰 Shop Sale: ${pkr(tToday)}${tOnline>0?`\n🌐 Website Sale: ${pkr(tOnline)}`:""}\n🧮 Kharcha: ${pkr(tExpT)}\n📈 Munafa: ${pkr(tProfit)}\n💳 Aaj ka Udhaar: ${pkr(tUdh)}\n\n🏆 Top: ${topToday}`;
   const sendDailyWA=()=>window.open("https://wa.me/?text="+encodeURIComponent(dailyMsg),"_blank");
   const sendDailyEmail=()=>window.open("mailto:?subject="+encodeURIComponent("Jameel Fabrics — Daily Summary "+td())+"&body="+encodeURIComponent(dailyMsg.replace(/\*/g,"")),"_blank");
   return(
     <div>
       <div style={css.h1}>📈 {t.analytics}</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"10px",marginBottom:"14px"}}>
-        {[{l:"Total Sale",v:pkr(totSale),c:T.success},{l:"Total Kharcha",v:pkr(totExp),c:T.danger},{l:"Total Munafa",v:pkr(totSale-totExp),c:T.accent},{l:"Customers",v:custs.length,c:"#e0a052"},{l:"Products",v:prods.length,c:T.info},{l:"Total Bills",v:sales.length,c:T.muted}].map((s,i)=>(
+        {[{l:"Shop Sale",v:pkr(totSale),c:T.success},...(totOnline>0?[{l:"🌐 Website Sale",v:pkr(totOnline),c:T.info}]:[]),{l:"Total Kharcha",v:pkr(totExp),c:T.danger},{l:"Total Munafa",v:pkr(totSale-totExp),c:T.accent},{l:"Customers",v:custs.length,c:"#e0a052"},{l:"Products",v:prods.length,c:T.info},{l:"Total Bills",v:sales.length,c:T.muted}].map((s,i)=>(
           <div key={i} style={css.sc(s.c)}><div style={{fontSize:"15px",fontWeight:"800",color:s.c}}>{s.v}</div><div style={{fontSize:"10px",color:T.muted}}>{s.l}</div></div>
         ))}
       </div>
