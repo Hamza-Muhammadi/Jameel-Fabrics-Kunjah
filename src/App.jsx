@@ -498,6 +498,20 @@ export default function App() {
   const syncSupp=(s)=>db.upsert("suppliers",{id:s.id,name:s.name,phone:s.phone,address:s.address,email:s.email,balance:s.balance,total_purchases:s.totalPurchases});
   const syncLog=(l)=>db.upsert("activity_logs",{id:l.id,date:l.date,user_name:l.userName,action:l.action,detail:l.detail});
   const syncShop=(s)=>db.upsert("shop_info",{id:1,name:s.name,address:s.address,phone:s.phone,whatsapp:s.whatsapp,tiktok:s.tiktok,instagram:s.instagram,website:s.website});
+  // ── Phase 7: Website product sync (ERP → website "pending" queue) ──
+  const WEB_CAT={"Mens Unstitched":"MP","Women Unstitched 3P":"WU","Women Stitched 2P+3P":"WS","Women Unstitched 2P":"WU","Other":"OT"};
+  const webPayload=(p)=>({name:p.name,cat:WEB_CAT[p.category]||"OT",price:Number(p.salePrice)||0,old_price:(p.offerPrice&&Number(p.offerPrice)<Number(p.salePrice))?Number(p.salePrice):null,description:[p.fabric,p.color].filter(Boolean).join(" · "),img1:p.img1||"",img2:p.img2||"",img3:p.img3||"",brand:p.brand||"",color:p.color||"",badge:p.badge_type||"",display_stock_text:p.display_stock_text||"",in_stock:(Number(p.stock)||0)>0,website_status:"pending"});
+  // Push a product to the website's PENDING queue (invisible on storefront until owner approves on website admin). Returns web id.
+  const publishWeb=async(p)=>{
+    if(!supabase){alert("Website sync off (Supabase set nahi).");return null;}
+    try{
+      if(p.webId){const{error}=await supabase.from("products").update(webPayload(p)).eq("id",p.webId);if(error)throw error;return p.webId;}
+      const{data,error}=await supabase.from("products").insert({...webPayload(p),sold_count:0}).select("id").single();
+      if(error)throw error;return data?.id||null;
+    }catch(e){alert("Website pe bhejne me masla: "+(e.message||e));return null;}
+  };
+  // On an ERP sale, reflect stock on the published website product (the "alert" — owner manually unlists)
+  const webStock=async(webId,remaining)=>{if(!supabase||!webId)return;try{await supabase.from("products").update({in_stock:remaining>0}).eq("id",webId);}catch(e){console.error("webStock",e);}};
 
   if(!user) return <Login users={users} onLogin={(u)=>{setUser(u);log("Login",u.name+" logged in");}} T={T} t={t} css={css}/>;
 
@@ -519,7 +533,7 @@ export default function App() {
   const doBackup=()=>{const data={users,prods,custs,emps,supps,sales,exps,udh,att,dmg,ret,cc,sal,pi,bk,dr,logs,supRet,shopInfo,sysPin,exportDate:new Date().toLocaleString()};const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));a.download=`jameel-backup-${td()}.json`;a.click();};
   const doRestore=(file)=>{const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(d.prods)setProds(d.prods);if(d.custs)setCusts(d.custs);if(d.emps)setEmps(d.emps);if(d.supps)setSupps(d.supps);if(d.sales)setSales(d.sales);if(d.exps)setExps(d.exps);if(d.udh)setUdh(d.udh);if(d.att)setAtt(d.att);if(d.dmg)setDmg(d.dmg);if(d.ret)setRet(d.ret);if(d.cc)setCc(d.cc);if(d.sal)setSal(d.sal);if(d.pi)setPi(d.pi);if(d.bk)setBk(d.bk);if(d.dr)setDr(d.dr);if(d.supRet)setSupRet(d.supRet);if(d.shopInfo)setShopInfo(d.shopInfo);alert("✅ Backup restore ho gaya!");log("Backup","Restored");}catch{alert("❌ File invalid!");}};r.readAsText(file);};
 
-  const sp = {T,t,css,isAdmin,isManager,td,gid,pkr,mon,log,BarcodeSVG,svgStr,db,syncProd,syncSale,syncCust,syncExp,syncUdh,syncEmp,syncSupp,syncShop,openWA};
+  const sp = {T,t,css,isAdmin,isManager,td,gid,pkr,mon,log,BarcodeSVG,svgStr,db,syncProd,syncSale,syncCust,syncExp,syncUdh,syncEmp,syncSupp,syncShop,openWA,publishWeb,webStock};
 
   const navGroups = [
     {
@@ -771,7 +785,7 @@ function Dashboard({T,t,css,todayTotal,todayOnline,todayExp,todayProfit,pendingU
 }
 
 // ── POS ───────────────────────────────────────────────────────
-function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,setDr,user,isAdmin,gid,pkr,td,log,buildBill,silentPrint,shopInfo,bk,setBk}) {
+function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,setDr,user,isAdmin,gid,pkr,td,log,buildBill,silentPrint,shopInfo,bk,setBk,webStock}) {
   const [cart,setCart]=useState([]);
   const [cust,setCust]=useState("Walk-in");
   const [sman,setSman]=useState(user.name);
@@ -829,6 +843,8 @@ function POS({T,t,css,prods,setProds,custs,emps,sales,setSales,udh,setUdh,dr,set
     const s={id:gid(),date:now,time:new Date().toLocaleTimeString(),hour:new Date().getHours(),customer:cust,phone:custs.find(c=>c.name===cust)?.phone||"",salesman:sman,dealing:dealing,items:cart,subtotal:sub,discount:discAmt,total:tot,paid:totalPaid,remaining:rem,payment:payStr};
     setSales(prev=>[...prev,s]);
     cart.forEach(item=>setProds(prev=>prev.map(p=>p.id===item.pid?{...p,stock:Math.max(0,+(p.stock-item.qty).toFixed(2))}:p)));
+    // Phase 7: if a sold product is listed on the website, reflect new stock there (alert owner to unlist)
+    cart.forEach(item=>{const p=prods.find(x=>x.id===item.pid);if(p&&p.webId&&webStock)webStock(p.webId,Math.max(0,+(p.stock-item.qty).toFixed(2)));});
     if(rem>0){const co=custs.find(c=>c.name===cust);setUdh(prev=>[...prev,{id:gid(),customerName:cust,phone:co?.phone||"",totalAmount:rem,paid:0,remaining:rem,date:now,dueDate:"",notes:`Bill#${s.id}`}]);}
     log("Sale",`Bill#${s.id} — ${cust} — ${pkr(tot)}`);
     setBill(s);setCart([]);setDisc(0);setDiscPct(0);setPaid(0);setPaid2(0);setSplitPay(false);setDealing("");
@@ -1070,12 +1086,12 @@ function SupplierReturn({T,t,css,supRet,setSupRet,supps,prods,setProds,gid,pkr,t
 }
 
 // ── INVENTORY ─────────────────────────────────────────────────
-function Inventory({T,t,css,prods,setProds,supps,isAdmin,gid,pkr,td,log,BarcodeSVG,gbc,ghc}) {
+function Inventory({T,t,css,prods,setProds,supps,isAdmin,gid,pkr,td,log,BarcodeSVG,gbc,ghc,publishWeb}) {
   const [sf,setSf]=useState(false);const [ep,setEp]=useState(null);const [sq,setSq]=useState("");const [cf,setCf]=useState("All");
   const blank={name:"",category:CATS[0],brand:"",color:"",fabric:"",qtyType:"meter",barcode:gbc(),hiddenCode:ghc(1),rack:"",stock:0,costPrice:0,salePrice:0,offerPrice:"",offerStart:"",offerEnd:"",supplier:"",bonus:0,maxDiscount:10,img1:"",img2:"",img3:"",listOnWeb:false,display_stock_text:"",size_type:"free",badge_type:""};
   const [fm,setFm]=useState(blank);
   const fl=prods.filter(p=>(cf==="All"||p.category===cf)&&(p.name.toLowerCase().includes(sq.toLowerCase())||p.barcode.includes(sq)));
-  const save=()=>{if(!fm.name||!fm.salePrice)return alert("Naam aur price zaroori!");const o={...fm,id:ep?ep.id:gid(),stock:+fm.stock,costPrice:+fm.costPrice,salePrice:+fm.salePrice,offerPrice:fm.offerPrice?+fm.offerPrice:null,bonus:+fm.bonus,maxDiscount:+fm.maxDiscount||10};ep?setProds(p=>p.map(x=>x.id===ep.id?o:x)):setProds(p=>[...p,o]);log("Inventory",`${fm.name} ${ep?"updated":"added"}`);setSf(false);setEp(null);setFm({...blank,barcode:gbc(),hiddenCode:ghc(prods.length+1)});};
+  const save=async()=>{if(!fm.name||!fm.salePrice)return alert("Naam aur price zaroori!");let o={...fm,id:ep?ep.id:gid(),stock:+fm.stock,costPrice:+fm.costPrice,salePrice:+fm.salePrice,offerPrice:fm.offerPrice?+fm.offerPrice:null,bonus:+fm.bonus,maxDiscount:+fm.maxDiscount||10};if(fm.listOnWeb&&publishWeb){const wid=await publishWeb(o);if(wid){o={...o,webId:wid,webStatus:"pending"};alert("🌐 Website ke 'Pending' me bhej diya!\nWebsite admin → Pending me ja kar photos/edit kar ke Publish karein.");}}ep?setProds(p=>p.map(x=>x.id===ep.id?o:x)):setProds(p=>[...p,o]);log("Inventory",`${fm.name} ${ep?"updated":"added"}`);setSf(false);setEp(null);setFm({...blank,barcode:gbc(),hiddenCode:ghc(prods.length+1)});};
   const isOff=(p)=>p.offerPrice&&p.offerStart&&p.offerEnd&&td()>=p.offerStart&&td()<=p.offerEnd;
   return(
     <div>
@@ -1091,7 +1107,7 @@ function Inventory({T,t,css,prods,setProds,supps,isAdmin,gid,pkr,td,log,BarcodeS
           <tbody>{fl.map((p,i)=>(
             <tr key={p.id} style={{background:p.stock<=5?T.danger+"11":"transparent"}}>
               <td style={css.td}>{i+1}</td>
-              <td style={css.td}><strong>{p.name}</strong><div style={{fontSize:"10px",color:T.muted}}>{p.brand}|{p.color}|{p.rack}</div></td>
+              <td style={css.td}><strong>{p.name}</strong>{p.webId&&<span style={{...css.badge(T.info),marginLeft:"4px",fontSize:"8px"}}>🌐 Web</span>}<div style={{fontSize:"10px",color:T.muted}}>{p.brand}|{p.color}|{p.rack}</div></td>
               <td style={css.td}><span style={css.badge(T.info)}>{p.category.split(" ")[0]}</span></td>
               <td style={css.td}><span style={css.badge(p.stock<=5?T.danger:T.success)}>{p.stock} {p.qtyType}</span></td>
               <td style={css.td}>{pkr(p.costPrice)}</td>
