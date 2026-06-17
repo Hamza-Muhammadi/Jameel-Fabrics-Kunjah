@@ -1436,12 +1436,33 @@ function Thermal({T,t,css,sales,buildBill,silentPrint,pkr,shopInfo}) {
 }
 
 // ── CUSTOMERS ─────────────────────────────────────────────────
-function Customers({T,t,css,custs,setCusts,sales,gid,pkr,log}) {
+function Customers({T,t,css,custs,setCusts,sales,gid,pkr,log,td}) {
   const [sf,setSf]=useState(false);const [ec,setEc]=useState(null);const [sq,setSq]=useState("");const [vc,setVc]=useState(null);const [lf,setLf]=useState("All");
   const blank={name:"",phone:"",whatsapp:"",address:"",city:"Kunjah",notes:"",loyalty:"Silver",totalPurchases:0,udhaar:0,visits:0};const [fm,setFm]=useState(blank);
   const fl=custs.filter(c=>(lf==="All"||c.loyalty===lf)&&(c.name.toLowerCase().includes(sq.toLowerCase())||c.phone.includes(sq)));
   const save=()=>{if(!fm.name||!fm.phone)return alert("Naam aur phone!");ec?setCusts(c=>c.map(x=>x.id===ec.id?{...x,...fm}:x)):setCusts(c=>[...c,{...fm,id:gid()}]);log("Customer",`${fm.name} ${ec?"updated":"added"}`);setSf(false);setEc(null);setFm(blank);};
   const lc=(l)=>l==="Platinum"?T.accent:l==="Gold"?"#e0a052":l==="VIP"?T.info:T.muted;
+  // ── Phase 6: editable customer ledger / statement ──
+  const [led,setLed]=useState(()=>LS.get("cust_ledger",[]));
+  useEffect(()=>{LS.set("cust_ledger",led);},[led]);
+  const [le,setLe]=useState({type:"payment",amount:"",desc:"",date:td()});
+  const statement=(c)=>{
+    if(!c)return{rows:[],bal:0,deb:0,cred:0};
+    const items=[];
+    sales.filter(s=>s.customer===c.name).forEach(s=>{
+      items.push({date:s.date,desc:`Bill #${String(s.id).slice(-5)} (${s.payment})`,debit:s.total||0,credit:0,k:"s"+s.id});
+      if(s.paid>0)items.push({date:s.date,desc:`Payment — Bill #${String(s.id).slice(-5)}`,debit:0,credit:s.paid,k:"sp"+s.id});
+    });
+    led.filter(l=>l.custName===c.name).forEach(l=>{
+      items.push({date:l.date,desc:l.desc||(l.type==="payment"?"Payment received":"Charge"),debit:l.type==="charge"?+l.amount:0,credit:l.type==="payment"?+l.amount:0,k:l.id,manual:l.id});
+    });
+    items.sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+    let bal=0,deb=0,cred=0;const rows=items.map(r=>{bal+=r.debit-r.credit;deb+=r.debit;cred+=r.credit;return{...r,bal};});
+    return{rows,bal,deb,cred};
+  };
+  const addLe=(c)=>{if(!le.amount||+le.amount<=0)return alert("Amount dalo!");setLed(p=>[...p,{...le,id:gid(),custName:c.name,amount:+le.amount}]);log("Ledger",`${c.name} — ${le.type} Rs.${le.amount}`);setLe({type:"payment",amount:"",desc:"",date:td()});};
+  const delLe=(id)=>{if(confirm("Yeh entry delete karein?"))setLed(p=>p.filter(x=>x.id!==id));};
+  const printStmt=(c)=>{const{rows,bal,deb,cred}=statement(c);printHTML(`<h2>🧵 Jameel Fabrics — Customer Statement</h2><p style="margin:0"><b>${c.name}</b> &nbsp; 📞 ${c.phone||"-"} &nbsp; ${c.city||""}</p><p style="margin:0;color:#666;font-size:11px">Generated: ${new Date().toLocaleString()}</p><table><tr><th>Date</th><th>Detail</th><th>Charge</th><th>Payment</th><th>Balance</th></tr>${rows.map(r=>`<tr><td>${r.date||"-"}</td><td>${r.desc}</td><td>${r.debit?pkr(r.debit):"-"}</td><td style="color:green">${r.credit?pkr(r.credit):"-"}</td><td><b>${pkr(r.bal)}</b></td></tr>`).join("")}</table><div class="total">Total Charge: ${pkr(deb)} | Total Paid: ${pkr(cred)} | <b>Baaki Balance: ${pkr(bal)}</b></div>`,"Customer Statement");};
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}><div style={css.h1}>👥 {t.customers}</div><button onClick={()=>{setEc(null);setFm(blank);setSf(true);}} style={css.btn()}>+ Add</button></div>
@@ -1459,7 +1480,29 @@ function Customers({T,t,css,custs,setCusts,sales,gid,pkr,log}) {
           </div>
         ))}
       </div>
-      {vc&&<div style={css.modal}><div style={css.mb()}><div style={{display:"flex",justifyContent:"space-between",marginBottom:"12px"}}><div style={{fontWeight:"800",fontSize:"16px",color:T.accent}}>{vc.name}</div><button onClick={()=>setVc(null)} style={css.btnO}>✕</button></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"5px",fontSize:"11px",marginBottom:"12px"}}>{[["Phone",vc.phone],["City",vc.city],["Loyalty",vc.loyalty],["Visits",vc.visits],["Total",pkr(vc.totalPurchases)],["Udhaar",pkr(vc.udhaar)]].map(([k,v])=><div key={k}><span style={{color:T.muted}}>{k}: </span><strong>{v}</strong></div>)}</div><div style={{fontWeight:"700",marginBottom:"6px"}}>Purchase History:</div><div style={{maxHeight:"180px",overflow:"auto"}}>{sales.filter(s=>s.customer===vc.name).map(s=><div key={s.id} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:`1px solid ${T.border}`,fontSize:"11px"}}><div>{s.date}<div style={{fontSize:"10px",color:T.muted}}>{s.salesman}•{s.payment}</div></div><div style={{textAlign:"right"}}><div style={{color:T.accent,fontWeight:"700"}}>{pkr(s.total)}</div>{s.remaining>0&&<div style={{fontSize:"10px",color:T.danger}}>Baaki:{pkr(s.remaining)}</div>}</div></div>)}</div></div></div>}
+      {vc&&(()=>{const st=statement(vc);const waStmt=()=>{const msg=`*Jameel Fabrics — ${vc.name} ka Hisab*\n\n${st.rows.slice(-12).map(r=>`${r.date||""}  ${r.desc}\n  ${r.debit?"Charge "+pkr(r.debit):""}${r.credit?"Paid "+pkr(r.credit):""}  → Bal ${pkr(r.bal)}`).join("\n")}\n\n*Baaki Balance: ${pkr(st.bal)}*`;window.open(`https://wa.me/${vc.phone?"92"+vc.phone.replace(/^0/,""):""}?text=`+encodeURIComponent(msg),"_blank");};return(
+      <div style={css.modal}><div style={css.mb("560px")}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:"10px"}}><div style={{fontWeight:"800",fontSize:"16px",color:T.accent}}>📒 {vc.name} — Khaata</div><button onClick={()=>setVc(null)} style={css.btnO}>✕</button></div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"5px",fontSize:"11px",marginBottom:"10px"}}>{[["Phone",vc.phone],["City",vc.city],["Loyalty",vc.loyalty],["Visits",vc.visits],["Total Khareed",pkr(vc.totalPurchases)],["Live Baaki",pkr(st.bal)]].map(([k,v])=><div key={k}><span style={{color:T.muted}}>{k}: </span><strong>{v}</strong></div>)}</div>
+        <div style={{display:"flex",gap:"6px",marginBottom:"8px"}}>
+          <div style={{...css.sc(T.success),flex:1,padding:"6px"}}><div style={{fontSize:"9px",color:T.muted}}>Total Charge</div><div style={{fontWeight:"800",color:T.success,fontSize:"13px"}}>{pkr(st.deb)}</div></div>
+          <div style={{...css.sc(T.info),flex:1,padding:"6px"}}><div style={{fontSize:"9px",color:T.muted}}>Total Paid</div><div style={{fontWeight:"800",color:T.info,fontSize:"13px"}}>{pkr(st.cred)}</div></div>
+          <div style={{...css.sc(st.bal>0?T.danger:T.success),flex:1,padding:"6px"}}><div style={{fontSize:"9px",color:T.muted}}>Baaki Balance</div><div style={{fontWeight:"800",color:st.bal>0?T.danger:T.success,fontSize:"13px"}}>{pkr(st.bal)}</div></div>
+        </div>
+        <div style={{fontWeight:"700",marginBottom:"4px",fontSize:"12px"}}>📋 Ledger Statement</div>
+        <div style={{maxHeight:"210px",overflow:"auto",border:`1px solid ${T.border}`,borderRadius:"8px"}}><table style={css.tbl}><thead><tr>{["Date","Detail","Charge","Paid","Balance",""].map(h=><th key={h} style={css.th}>{h}</th>)}</tr></thead><tbody>{st.rows.map((r)=><tr key={r.k}><td style={{...css.td,whiteSpace:"nowrap",fontSize:"10px"}}>{r.date||"-"}</td><td style={{...css.td,fontSize:"10px"}}>{r.desc}</td><td style={css.td}>{r.debit?pkr(r.debit):"-"}</td><td style={{...css.td,color:T.success}}>{r.credit?pkr(r.credit):"-"}</td><td style={{...css.td,fontWeight:"700"}}>{pkr(r.bal)}</td><td style={css.td}>{r.manual&&<button onClick={()=>delLe(r.manual)} style={{...css.btn(T.danger),padding:"1px 5px",fontSize:"9px"}}>✕</button>}</td></tr>)}{st.rows.length===0&&<tr><td colSpan={6} style={{...css.td,textAlign:"center",color:T.muted}}>Koi transaction nahi</td></tr>}</tbody></table></div>
+        <div style={{marginTop:"8px",padding:"8px",background:T.surface,borderRadius:"8px"}}>
+          <div style={{fontSize:"11px",fontWeight:"700",marginBottom:"5px"}}>➕ Entry add karein (payment / charge / adjustment)</div>
+          <div style={{display:"flex",gap:"5px",flexWrap:"wrap",alignItems:"flex-end"}}>
+            <div><label style={css.lbl}>Type</label><select value={le.type} onChange={e=>setLe({...le,type:e.target.value})} style={{...css.sel,width:"110px"}}><option value="payment">💚 Payment aaya</option><option value="charge">🔴 Charge / Udhaar</option></select></div>
+            <div><label style={css.lbl}>Amount</label><input type="number" value={le.amount} onChange={e=>setLe({...le,amount:e.target.value})} style={{...css.inp,width:"90px"}}/></div>
+            <div style={{flex:1,minWidth:"110px"}}><label style={css.lbl}>Tafseel</label><input value={le.desc} onChange={e=>setLe({...le,desc:e.target.value})} style={css.inp} placeholder="e.g. Cash received"/></div>
+            <div><label style={css.lbl}>Date</label><input type="date" value={le.date} onChange={e=>setLe({...le,date:e.target.value})} style={{...css.inp,width:"130px"}}/></div>
+            <button onClick={()=>addLe(vc)} style={css.btn(T.success)}>+ Add</button>
+          </div>
+        </div>
+        <div style={{...css.row,marginTop:"10px"}}><button onClick={()=>printStmt(vc)} style={{...css.btn(),flex:1}}>🖨️ Print Statement</button><button onClick={waStmt} style={{...css.btn(T.success),flex:1}}>📱 WhatsApp Statement</button></div>
+      </div></div>);})()}
       {sf&&<div style={css.modal}><div style={css.mb("420px")}><div style={{fontWeight:"800",color:T.accent,marginBottom:"12px"}}>{ec?"✏️":"➕"} Customer</div><div style={css.g2}>{[["name","Naam","text"],["phone","Phone","text"],["whatsapp","WhatsApp","text"],["address","Pata","text"],["city","Sheher","text"],["notes","Notes","text"]].map(([k,l,tp])=><div key={k}><label style={css.lbl}>{l}</label><input type={tp} value={fm[k]} onChange={e=>setFm({...fm,[k]:e.target.value})} style={css.inp}/></div>)}<div><label style={css.lbl}>Loyalty</label><select value={fm.loyalty} onChange={e=>setFm({...fm,loyalty:e.target.value})} style={css.sel}>{LOYALTY.map(l=><option key={l} value={l}>{l}</option>)}</select></div></div><div style={{...css.row,marginTop:"12px"}}><button onClick={save} style={{...css.btn(),flex:1}}>💾 Save</button><button onClick={()=>setSf(false)} style={css.btnO}>Wapas</button></div></div></div>}
     </div>
   );
