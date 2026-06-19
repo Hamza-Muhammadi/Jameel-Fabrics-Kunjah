@@ -119,6 +119,13 @@ const td = ()=>new Date().toISOString().split("T")[0];
 const gid = ()=>Date.now()+Math.floor(Math.random()*9999);
 const pkr = (n)=>"Rs. "+Number(n||0).toLocaleString();
 const mon = ()=>td().slice(0,7);
+
+// ── Encrypted cloud backup helpers (AES-GCM + PBKDF2) ──────────
+const _ab2b64=(buf)=>{let s="";const b=new Uint8Array(buf);const c=0x8000;for(let i=0;i<b.length;i+=c)s+=String.fromCharCode.apply(null,b.subarray(i,i+c));return btoa(s);};
+const _b642ab=(b64)=>{const s=atob(b64);const b=new Uint8Array(s.length);for(let i=0;i<s.length;i++)b[i]=s.charCodeAt(i);return b;};
+async function _deriveKey(pass,salt){const km=await crypto.subtle.importKey("raw",new TextEncoder().encode(pass),"PBKDF2",false,["deriveKey"]);return crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:100000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);}
+async function encryptJSON(obj,pass){const salt=crypto.getRandomValues(new Uint8Array(16));const iv=crypto.getRandomValues(new Uint8Array(12));const key=await _deriveKey(pass,salt);const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,new TextEncoder().encode(JSON.stringify(obj)));const out=new Uint8Array(16+12+ct.byteLength);out.set(salt,0);out.set(iv,16);out.set(new Uint8Array(ct),28);return _ab2b64(out);}
+async function decryptJSON(b64,pass){const buf=_b642ab(b64);const salt=buf.slice(0,16),iv=buf.slice(16,28),ct=buf.slice(28);const key=await _deriveKey(pass,salt);const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv},key,ct);return JSON.parse(new TextDecoder().decode(pt));}
 const gbc = ()=>"JF"+String(gid()).slice(-6);
 const ghc = (i)=>{const m="ABCDEFGHIJ";return `J${m[i%10]}${m[(i+3)%10]}${m[(i+7)%10]}F`;};
 
@@ -327,6 +334,8 @@ export default function App() {
   const pinTimer = useRef(null);
   const [showAlerts,setShowAlerts] = useState(false);
   const [webPending,setWebPending] = useState(0);
+  const [cloudStatus,setCloudStatus] = useState("");
+  const cloudTimer = useRef(null);
   // Ctrl+K / Cmd+K → focus global search from anywhere
   useEffect(()=>{const h=(e)=>{if((e.ctrlKey||e.metaKey)&&String(e.key).toLowerCase()==="k"){e.preventDefault();setShowGSearch(true);if(gSearchRef.current)gSearchRef.current.focus();}};window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h);},[]);
   // Website orders pending count (for the alerts bell)
@@ -565,6 +574,36 @@ export default function App() {
   const doBackup=()=>{const data={users,prods,custs,emps,supps,sales,exps,udh,att,dmg,ret,cc,sal,pi,bk,dr,logs,supRet,shopInfo,sysPin,exportDate:new Date().toLocaleString()};const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));a.download=`jameel-backup-${td()}.json`;a.click();LS.set("lastBackup",td());};
   const doRestore=(file)=>{const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(d.prods)setProds(d.prods);if(d.custs)setCusts(d.custs);if(d.emps)setEmps(d.emps);if(d.supps)setSupps(d.supps);if(d.sales)setSales(d.sales);if(d.exps)setExps(d.exps);if(d.udh)setUdh(d.udh);if(d.att)setAtt(d.att);if(d.dmg)setDmg(d.dmg);if(d.ret)setRet(d.ret);if(d.cc)setCc(d.cc);if(d.sal)setSal(d.sal);if(d.pi)setPi(d.pi);if(d.bk)setBk(d.bk);if(d.dr)setDr(d.dr);if(d.supRet)setSupRet(d.supRet);if(d.shopInfo)setShopInfo(d.shopInfo);alert("✅ Backup restore ho gaya!");log("Backup","Restored");}catch{alert("❌ File invalid!");}};r.readAsText(file);};
 
+  // ── Cloud encrypted backup / restore (Supabase) ──
+  const _allData=()=>({users,prods,custs,emps,supps,sales,exps,udh,att,dmg,ret,cc,sal,pi,bk,dr,logs,supRet,shopInfo,sysPin,exportDate:new Date().toISOString()});
+  const _applyData=(d)=>{if(d.users)setUsers(d.users);if(d.prods)setProds(d.prods);if(d.custs)setCusts(d.custs);if(d.emps)setEmps(d.emps);if(d.supps)setSupps(d.supps);if(d.sales)setSales(d.sales);if(d.exps)setExps(d.exps);if(d.udh)setUdh(d.udh);if(d.att)setAtt(d.att);if(d.dmg)setDmg(d.dmg);if(d.ret)setRet(d.ret);if(d.cc)setCc(d.cc);if(d.sal)setSal(d.sal);if(d.pi)setPi(d.pi);if(d.bk)setBk(d.bk);if(d.dr)setDr(d.dr);if(d.supRet)setSupRet(d.supRet);if(d.shopInfo)setShopInfo(d.shopInfo);};
+  const cloudBackup=async(silent)=>{
+    if(!supabase){if(!silent)alert("Supabase off — cloud backup nahi ho sakta.");return;}
+    const pass=LS.get("backupPass","");
+    if(!pass){if(!silent)alert("Pehle Settings me backup password set karo.");return;}
+    try{setCloudStatus("☁️ Saving...");const enc=await encryptJSON(_allData(),pass);
+      const{error}=await supabase.from("erp_cloud_backup").upsert({id:"jameel-erp",data:enc,updated_at:new Date().toISOString()});
+      if(error)throw error;LS.set("lastCloud",new Date().toLocaleString());setCloudStatus("☁️ "+new Date().toLocaleTimeString());if(!silent)alert("✅ Cloud par backup ho gaya!");
+    }catch(e){setCloudStatus("⚠️ Cloud fail");if(!silent)alert("Cloud backup masla: "+(e.message||e)+"\n\nAgar 'erp_cloud_backup' table nahi bani to pehle SQL chalao (Settings me likha hai).");}
+  };
+  const cloudRestore=async()=>{
+    if(!supabase)return alert("Supabase off.");
+    const pass=window.prompt("Backup password daalo (jo aap ne set kiya tha):");if(!pass)return;
+    try{const{data,error}=await supabase.from("erp_cloud_backup").select("data,updated_at").eq("id","jameel-erp").single();
+      if(error||!data)throw error||new Error("Koi cloud backup nahi mila");
+      const d=await decryptJSON(data.data,pass);
+      if(!window.confirm(`Cloud backup mila (${new Date(data.updated_at).toLocaleString()}).\nMojooda data is se replace ho jayega. Restore karein?`))return;
+      _applyData(d);LS.set("backupPass",pass);alert("✅ Cloud se data restore ho gaya!");log("Backup","Cloud restored");
+    }catch(e){alert("Restore fail: "+(e.message||e)+"\n\n(Password ghalat ho sakta hai ya backup nahi bana.)");}
+  };
+  // Auto cloud-backup: data badalne ke 60s baad (debounced)
+  useEffect(()=>{
+    if(!supabase||!LS.get("backupPass",""))return;
+    clearTimeout(cloudTimer.current);
+    cloudTimer.current=setTimeout(()=>cloudBackup(true),60000);
+    return()=>clearTimeout(cloudTimer.current);
+  },[prods,sales,custs,udh,exps,emps,supps,bk,dr,ret,dmg,cc,sal,pi,shopInfo]);// eslint-disable-line
+
   const sp = {T,t,css,isAdmin,isManager,td,gid,pkr,mon,log,BarcodeSVG,svgStr,db,syncProd,syncSale,syncCust,syncExp,syncUdh,syncEmp,syncSupp,syncShop,openWA,publishWeb,webStock};
 
   const navGroups = [
@@ -735,7 +774,7 @@ export default function App() {
           {mod==="actlog"    && <ActLog {...sp} logs={logs} setLogs={setLogs}/>}
           {mod==="reports"   && <Reports {...sp} sales={sales} exps={exps} prods={prods} emps={emps} custs={custs} supps={supps} sal={sal} dmg={dmg} cc={cc} att={att} users={users}/>}
           {mod==="weborders" && <WebOrders T={T} css={css} pkr={pkr}/>}
-          {mod==="settings"  && <Settings {...sp} theme={theme} setTheme={setTheme} lang={lang} setLang={setLang} users={users} setUsers={setUsers} shopInfo={shopInfo} setShopInfo={setShopInfo} sysPin={sysPin} setSysPin={setSysPin} doBackup={doBackup} doRestore={doRestore}/>}
+          {mod==="settings"  && <Settings {...sp} theme={theme} setTheme={setTheme} lang={lang} setLang={setLang} users={users} setUsers={setUsers} shopInfo={shopInfo} setShopInfo={setShopInfo} sysPin={sysPin} setSysPin={setSysPin} doBackup={doBackup} doRestore={doRestore} cloudBackup={cloudBackup} cloudRestore={cloudRestore} cloudStatus={cloudStatus}/>}
         </div>
       </div>
     </div>
@@ -2379,7 +2418,10 @@ function WebOrders({T,css,pkr}) {
 
 
 // ── SETTINGS ──────────────────────────────────────────────────
-function Settings({T,t,css,theme,setTheme,lang,setLang,users,setUsers,isAdmin,shopInfo,setShopInfo,sysPin,setSysPin,doBackup,doRestore}) {
+function Settings({T,t,css,theme,setTheme,lang,setLang,users,setUsers,isAdmin,shopInfo,setShopInfo,sysPin,setSysPin,doBackup,doRestore,cloudBackup,cloudRestore,cloudStatus}) {
+  const [bpass,setBpass]=useState(()=>LS.get("backupPass",""));
+  const [showSQL,setShowSQL]=useState(false);
+  const saveBpass=()=>{if(!bpass||bpass.length<4)return alert("Password kam az kam 4 characters ka rakho.");LS.set("backupPass",bpass);alert("✅ Backup password set! Ab cloud backup auto chalega.\n⚠️ Ye password yaad rakhna — naye PC pe restore ke liye yahi chahiye.");};
   const [showU,setShowU]=useState(false);const [eu,setEu]=useState(null);const [fm,setFm]=useState({username:"",password:"",role:"Salesman",name:"",phone:""});
   const [si,setSi]=useState(shopInfo||{});const [editShop,setEditShop]=useState(false);
   const [pinFm,setPinFm]=useState({old:"",nw:"",cf:""});const [showPinFm,setShowPinFm]=useState(false);
@@ -2421,10 +2463,26 @@ function Settings({T,t,css,theme,setTheme,lang,setLang,users,setUsers,isAdmin,sh
           {showPinFm&&<>{sysPin&&<><label style={css.lbl}>Purana PIN</label><input type="password" value={pinFm.old} onChange={e=>setPinFm({...pinFm,old:e.target.value})} style={css.inp}/></>}<label style={css.lbl}>Nayi PIN (blank = remove)</label><input type="password" value={pinFm.nw} onChange={e=>setPinFm({...pinFm,nw:e.target.value})} style={css.inp}/><label style={css.lbl}>Confirm PIN</label><input type="password" value={pinFm.cf} onChange={e=>setPinFm({...pinFm,cf:e.target.value})} style={css.inp}/><button onClick={savePin} style={{...css.btn(T.success),width:"100%",marginTop:"8px"}}>💾 Save PIN</button></>}
         </div>
         <div style={css.card}>
-          <div style={{fontWeight:"700",marginBottom:"8px"}}>💾 Backup & Restore</div>
+          <div style={{fontWeight:"700",marginBottom:"8px"}}>💾 Backup & Restore (File)</div>
           <button onClick={doBackup} style={{...css.btn(T.success),width:"100%",marginBottom:"10px",fontSize:"11px"}}>⬇️ Download Backup (JSON)</button>
           <label style={css.lbl}>Restore from File</label>
           <input type="file" accept=".json" onChange={e=>e.target.files[0]&&doRestore(e.target.files[0])} style={{fontSize:"11px",color:T.text,marginTop:"4px",width:"100%"}}/>
+        </div>
+        <div style={{...css.card,borderLeft:`4px solid ${T.info}`}}>
+          <div style={{fontWeight:"700",marginBottom:"4px"}}>☁️ Cloud Auto-Backup <span style={{fontSize:"10px",color:T.muted}}>(PC change pe safe)</span></div>
+          <div style={{fontSize:"10px",color:T.muted,marginBottom:"8px"}}>Data har thodi der khud cloud (Supabase) pe save hota hai — password se encrypted. Naye PC pe yahi password daal kar restore karo. {cloudStatus&&<b style={{color:T.success}}> · {cloudStatus}</b>}{LS.get("lastCloud","")&&<span> · Last: {LS.get("lastCloud","")}</span>}</div>
+          <label style={css.lbl}>🔑 Backup Password (yaad rakhna!)</label>
+          <div style={{...css.row}}><input type="text" value={bpass} onChange={e=>setBpass(e.target.value)} style={{...css.inp,flex:1}} placeholder="strong password"/><button onClick={saveBpass} style={css.btn(T.success)}>Set</button></div>
+          <div style={{...css.row,marginTop:"8px"}}><button onClick={()=>cloudBackup&&cloudBackup(false)} style={{...css.btn(T.info),flex:1,fontSize:"11px"}}>☁️ Backup Now</button><button onClick={()=>cloudRestore&&cloudRestore()} style={{...css.btn("#a052e0"),flex:1,fontSize:"11px"}}>⬇️ Restore from Cloud</button></div>
+          <button onClick={()=>setShowSQL(s=>!s)} style={{...css.btnO,width:"100%",marginTop:"8px",fontSize:"10px"}}>❓ Pehli dafa setup (Supabase table)</button>
+          {showSQL&&<div style={{marginTop:"6px",fontSize:"10px",color:T.muted}}>Supabase → SQL Editor → ye paste karke Run karein (sirf 1 dafa):<pre style={{background:T.bg,border:`1px solid ${T.border}`,borderRadius:"6px",padding:"8px",overflow:"auto",fontSize:"9px",whiteSpace:"pre-wrap",color:T.text,marginTop:"4px"}}>{`create table if not exists erp_cloud_backup (
+  id text primary key,
+  data text,
+  updated_at timestamptz default now()
+);
+alter table erp_cloud_backup enable row level security;
+create policy "erp_backup_all" on erp_cloud_backup
+  for all using (true) with check (true);`}</pre><div style={{color:T.muted}}>Data encrypted hota hai is liye yeh table safe hai.</div></div>}
         </div>
         <div style={css.card}><div style={{fontWeight:"700",marginBottom:"8px"}}>💾 System</div><div style={{background:T.success+"22",borderRadius:"6px",padding:"6px",fontSize:"11px",color:T.success,marginBottom:"6px"}}>✅ v6.0 — All modules active</div><div style={{fontSize:"10px",color:T.muted,marginBottom:"6px"}}>Data auto-save localStorage ✓</div><button onClick={clear} style={{...css.btn(T.danger),width:"100%",fontSize:"11px"}}>🗑️ Reset All Data</button></div>
       </div>
