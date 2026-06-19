@@ -604,6 +604,29 @@ export default function App() {
     return()=>clearTimeout(cloudTimer.current);
   },[prods,sales,custs,udh,exps,emps,supps,bk,dr,ret,dmg,cc,sal,pi,shopInfo]);// eslint-disable-line
 
+  // ── Readable (human-friendly) backup report + email summary ──
+  const doReadable=()=>{
+    const d=_allData(),today=td(),m=mon(),now=new Date().toLocaleString();
+    const sum=(arr,f)=>arr.reduce((a,x)=>a+(+f(x)||0),0),fmtR=n=>"Rs. "+Number(n||0).toLocaleString();
+    const tSale=sum(d.sales.filter(s=>s.date===today),s=>s.total),mSale=sum(d.sales.filter(s=>s.date.startsWith(m)),s=>s.total),mExp=sum(d.exps.filter(e=>e.date.startsWith(m)),e=>e.amount),stockVal=sum(d.prods,p=>(p.stock||0)*(p.costPrice||0)),totUdh=sum(d.udh.filter(u=>u.remaining>0),u=>u.remaining);
+    const card=(l,v,c)=>`<div style="flex:1;min-width:130px;background:#fff;border:1px solid #eee;border-left:4px solid ${c};border-radius:8px;padding:10px"><div style="font-size:18px;font-weight:800;color:${c}">${v}</div><div style="font-size:11px;color:#666">${l}</div></div>`;
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Jameel Fabrics — Report ${today}</title><style>body{font-family:Arial,'Segoe UI',sans-serif;background:#f6f7fb;color:#222;margin:0;padding:20px}h1{color:#2563eb;margin:0 0 2px}h2{margin:22px 0 8px;border-bottom:2px solid #2563eb;padding-bottom:4px;font-size:16px}table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;margin-bottom:10px}th{background:#2563eb;color:#fff;text-align:left;padding:7px;font-size:12px}td{padding:6px 7px;border-bottom:1px solid #eee;font-size:12px}tr:nth-child(even){background:#f9faff}.cards{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px}</style></head><body>
+    <h1>🧵 ${d.shopInfo?.name||"Jameel Fabrics"} — Business Report</h1><div style="color:#666;font-size:12px;margin-bottom:14px">Generated: ${now}</div>
+    <div class="cards">${card("Aaj ki Sale",fmtR(tSale),"#16a34a")}${card("Is maheene Sale",fmtR(mSale),"#2563eb")}${card("Maheene Kharcha",fmtR(mExp),"#dc2626")}${card("Stock Value",fmtR(stockVal),"#0ea5e9")}${card("Pending Udhaar",fmtR(totUdh),"#e0a052")}${card("Total Bills",d.sales.length,"#64748b")}</div>
+    <h2>💸 Pending Udhaar (${d.udh.filter(u=>u.remaining>0).length})</h2><table><tr><th>Customer</th><th>Phone</th><th>Baaki</th><th>Due</th></tr>${d.udh.filter(u=>u.remaining>0).map(u=>`<tr><td>${u.customerName}</td><td>${u.phone||""}</td><td style="color:#dc2626;font-weight:700">${fmtR(u.remaining)}</td><td>${u.dueDate||"—"}</td></tr>`).join("")||'<tr><td colspan="4">Koi udhaar nahi</td></tr>'}</table>
+    <h2>👥 Customers (${d.custs.length})</h2><table><tr><th>Naam</th><th>Phone</th><th>City</th><th>Khareed</th><th>Udhaar</th></tr>${d.custs.slice(0,250).map(c=>`<tr><td>${c.name}</td><td>${c.phone||""}</td><td>${c.city||""}</td><td>${fmtR(c.totalPurchases)}</td><td>${fmtR(c.udhaar)}</td></tr>`).join("")}</table>
+    <h2>📦 Stock (${d.prods.length})</h2><table><tr><th>Product</th><th>Brand</th><th>Stock</th><th>Cost</th><th>Sale</th></tr>${d.prods.slice(0,400).map(p=>`<tr><td>${p.name}</td><td>${p.brand||""}</td><td>${p.stock} ${p.qtyType||""}</td><td>${fmtR(p.costPrice)}</td><td>${fmtR(p.salePrice)}</td></tr>`).join("")}</table>
+    <h2>🧾 Recent Bills (last 60)</h2><table><tr><th>Date</th><th>Customer</th><th>Total</th><th>Paid</th><th>Baaki</th></tr>${[...d.sales].slice(-60).reverse().map(s=>`<tr><td>${s.date}</td><td>${s.customer}</td><td>${fmtR(s.total)}</td><td>${fmtR(s.paid)}</td><td>${fmtR(s.remaining)}</td></tr>`).join("")}</table>
+    <div style="color:#999;font-size:10px;margin-top:20px">Ye report sirf parhne/samajhne ke liye hai. Data wapas laane (restore) ke liye JSON backup file ya Cloud Restore istemal karein.</div></body></html>`;
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([html],{type:"text/html"}));a.download=`jameel-report-${today}.html`;a.click();LS.set("lastBackup",td());
+  };
+  const emailBackup=()=>{
+    const d=_allData(),today=td(),m=mon();
+    const tSale=d.sales.filter(s=>s.date===today).reduce((a,s)=>a+s.total,0),mSale=d.sales.filter(s=>s.date.startsWith(m)).reduce((a,s)=>a+s.total,0),totUdh=d.udh.filter(u=>u.remaining>0).reduce((a,u)=>a+u.remaining,0);
+    const body=`Jameel Fabrics — Backup Summary (${today})\n\nAaj Sale: Rs.${tSale.toLocaleString()}\nIs maheene Sale: Rs.${mSale.toLocaleString()}\nPending Udhaar: Rs.${totUdh.toLocaleString()}\nBills: ${d.sales.length} | Products: ${d.prods.length} | Customers: ${d.custs.length}\n\nNote: Backup file (JSON ya HTML) Settings se download kar ke is email me ATTACH kar lein — taake mehfooz rahe.`;
+    window.open(`mailto:${shopInfo?.email||""}?subject=${encodeURIComponent("Jameel Fabrics Backup "+today)}&body=${encodeURIComponent(body)}`);
+  };
+
   const sp = {T,t,css,isAdmin,isManager,td,gid,pkr,mon,log,BarcodeSVG,svgStr,db,syncProd,syncSale,syncCust,syncExp,syncUdh,syncEmp,syncSupp,syncShop,openWA,publishWeb,webStock};
 
   const navGroups = [
@@ -774,7 +797,7 @@ export default function App() {
           {mod==="actlog"    && <ActLog {...sp} logs={logs} setLogs={setLogs}/>}
           {mod==="reports"   && <Reports {...sp} sales={sales} exps={exps} prods={prods} emps={emps} custs={custs} supps={supps} sal={sal} dmg={dmg} cc={cc} att={att} users={users}/>}
           {mod==="weborders" && <WebOrders T={T} css={css} pkr={pkr}/>}
-          {mod==="settings"  && <Settings {...sp} theme={theme} setTheme={setTheme} lang={lang} setLang={setLang} users={users} setUsers={setUsers} shopInfo={shopInfo} setShopInfo={setShopInfo} sysPin={sysPin} setSysPin={setSysPin} doBackup={doBackup} doRestore={doRestore} cloudBackup={cloudBackup} cloudRestore={cloudRestore} cloudStatus={cloudStatus}/>}
+          {mod==="settings"  && <Settings {...sp} theme={theme} setTheme={setTheme} lang={lang} setLang={setLang} users={users} setUsers={setUsers} shopInfo={shopInfo} setShopInfo={setShopInfo} sysPin={sysPin} setSysPin={setSysPin} doBackup={doBackup} doRestore={doRestore} cloudBackup={cloudBackup} cloudRestore={cloudRestore} cloudStatus={cloudStatus} doReadable={doReadable} emailBackup={emailBackup}/>}
         </div>
       </div>
     </div>
@@ -822,7 +845,7 @@ function Dashboard({T,t,css,todayTotal,todayOnline,todayExp,todayProfit,pendingU
           <div key={i} style={css.sc(s.c)}><div style={{fontSize:"18px"}}>{s.i}</div><div style={{fontSize:"17px",fontWeight:"900",color:s.c}}>{s.v}</div><div style={{fontSize:"10px",color:T.muted}}>{s.l}</div></div>
         ))}
       </div>
-      {backupDays>=3&&<div style={{...css.card,borderLeft:`4px solid ${T.danger}`,marginBottom:"12px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"6px"}}><div style={{fontSize:"12px",fontWeight:"700",color:T.danger}}>💾 {lastBackup?`Backup ${backupDays} din purana hai`:"Aap ne abhi tak backup nahi liya"} — Settings me jaa kar backup le lo (data safety)</div></div>}
+      {backupDays>=1&&<div style={{...css.card,borderLeft:`4px solid ${T.danger}`,marginBottom:"12px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"6px"}}><div style={{fontSize:"12px",fontWeight:"700",color:T.danger}}>💾 {lastBackup?`File backup ${backupDays} din purana hai`:"Aap ne abhi tak file backup nahi liya"} — Settings → Backup se file download kar lo (Drive/email pe rakho). ☁️ Cloud backup khud chalta rahta hai.</div></div>}
       <div style={{...css.card,marginBottom:"12px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px",flexWrap:"wrap",gap:"6px"}}>
           <div style={{fontWeight:"700",fontSize:"12px"}}>🎯 Aaj ka Sales Target</div>
@@ -2418,7 +2441,7 @@ function WebOrders({T,css,pkr}) {
 
 
 // ── SETTINGS ──────────────────────────────────────────────────
-function Settings({T,t,css,theme,setTheme,lang,setLang,users,setUsers,isAdmin,shopInfo,setShopInfo,sysPin,setSysPin,doBackup,doRestore,cloudBackup,cloudRestore,cloudStatus}) {
+function Settings({T,t,css,theme,setTheme,lang,setLang,users,setUsers,isAdmin,shopInfo,setShopInfo,sysPin,setSysPin,doBackup,doRestore,cloudBackup,cloudRestore,cloudStatus,doReadable,emailBackup}) {
   const [bpass,setBpass]=useState(()=>LS.get("backupPass",""));
   const [showSQL,setShowSQL]=useState(false);
   const saveBpass=()=>{if(!bpass||bpass.length<4)return alert("Password kam az kam 4 characters ka rakho.");LS.set("backupPass",bpass);alert("✅ Backup password set! Ab cloud backup auto chalega.\n⚠️ Ye password yaad rakhna — naye PC pe restore ke liye yahi chahiye.");};
@@ -2464,7 +2487,10 @@ function Settings({T,t,css,theme,setTheme,lang,setLang,users,setUsers,isAdmin,sh
         </div>
         <div style={css.card}>
           <div style={{fontWeight:"700",marginBottom:"8px"}}>💾 Backup & Restore (File)</div>
-          <button onClick={doBackup} style={{...css.btn(T.success),width:"100%",marginBottom:"10px",fontSize:"11px"}}>⬇️ Download Backup (JSON)</button>
+          <button onClick={doBackup} style={{...css.btn(T.success),width:"100%",marginBottom:"6px",fontSize:"11px"}}>⬇️ Download Backup (JSON — restore ke liye)</button>
+          <button onClick={()=>doReadable&&doReadable()} style={{...css.btn(T.info),width:"100%",marginBottom:"6px",fontSize:"11px"}}>📄 Readable Report (HTML — parhne ke liye)</button>
+          <button onClick={()=>emailBackup&&emailBackup()} style={{...css.btn("#a052e0"),width:"100%",marginBottom:"10px",fontSize:"11px"}}>✉️ Email Summary</button>
+          <div style={{fontSize:"10px",color:T.muted,marginBottom:"8px",background:T.surface,borderRadius:"6px",padding:"6px"}}>💡 <b>Tip:</b> Browser ka download folder apne <b>Google Drive synced folder</b> par set kar do — phir har backup file khud Drive (cloud) par chali jayegi. Email me file ATTACH kar ke bhi mehfooz rakho.</div>
           <label style={css.lbl}>Restore from File</label>
           <input type="file" accept=".json" onChange={e=>e.target.files[0]&&doRestore(e.target.files[0])} style={{fontSize:"11px",color:T.text,marginTop:"4px",width:"100%"}}/>
         </div>
